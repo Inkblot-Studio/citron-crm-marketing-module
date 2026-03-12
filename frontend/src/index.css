@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  background-color: var(--inkblot-semantic-color-background-primary);
+  color: var(--inkblot-semantic-color-text-primary);
+  font-family: var(--inkblot-typography-font-family-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer utilities {
+  .glass {
+    background: var(--inkblot-semantic-color-background-secondary);
+    border: 1px solid var(--inkblot-semantic-color-border-default);
+    box-shadow: var(--inkblot-shadow-sm);
+  }
+
+  .glass-hover:hover {
+    background: var(--inkblot-semantic-color-interactive-secondary-hover);
+  }
+
+  .surface-2 {
+    background-color: var(--inkblot-semantic-color-background-tertiary);
+  }
+
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 1.5s ease-in-out infinite;
+    background: linear-gradient(
+      90deg,
+      var(--inkblot-semantic-color-background-secondary) 25%,
+      var(--inkblot-semantic-color-background-tertiary) 50%,
+      var(--inkblot-semantic-color-background-secondary) 75%
+    );
+    background-size: 200% 100%;
+  }
+}
