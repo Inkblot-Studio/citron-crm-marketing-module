@@ -120,8 +120,7 @@ citron-crm-marketing-module/
 │   ├── src/
 │   │   ├── marketing/
 │   │   │   └── MarketingPage.tsx    # Main page (exported as ./Marketing)
-│   │   ├── lib/
-│   │   │   └── ToastContext.tsx     # Toast context
+│   │   ├── lib/                     # (reserved)
 │   │   ├── App.tsx                  # Shell for standalone development
 │   │   ├── main.tsx                 # Entry point
 │   │   └── index.css                # Styles (Tailwind + citron-ds)
@@ -172,8 +171,24 @@ For production, deploy the contents of `dist/` to a CDN or static server and use
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Host as remote (ToastContext)
+
+`MarketingPage` imports `useToast` from the host's `ToastContext` to avoid the "useToast must be used within ToastProvider" error. The marketing module consumes the host as a remote.
+
+### Environment variable
+
+Copy `.env.example` to `.env` and set the host URL:
+
+```
+VITE_HOST_URL=https://citron-crm.vercel.app
+```
+
+For local development, omit or leave empty to default to `http://localhost:5173` (host must be running there). For production builds, set `VITE_HOST_URL` to the deployed host URL.
+
+The host must expose `./ToastContext` in its federation config.
+
 ## Notes
 
-- **ToastProvider**: `MarketingPage` uses `useToast()`. If the host does not provide a `ToastProvider`, you must wrap `MarketingPage` in one.
+- **ToastProvider**: `MarketingPage` imports `useToast` from the host (`host/ToastContext`). The host must expose `ToastContext` and wrap the app in `ToastProvider`.
 - **Design system**: Styles depend on `@citron-systems/citron-ds`. Ensure the host imports its CSS (`import '@citron-systems/citron-ds/css'`).
 - **Port**: Preview uses port 5001. In dev (`npm run dev`), Vite uses 5173 by default.

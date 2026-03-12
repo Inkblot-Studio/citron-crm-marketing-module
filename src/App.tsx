@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Toaster } from '@citron-systems/citron-ui'
-import { ToastProvider, useToast } from '@/lib/ToastContext'
+import { ToastProvider, useToast } from 'host/ToastContext'
 
 const MarketingPage = lazy(() => import('@/marketing/MarketingPage'))
 

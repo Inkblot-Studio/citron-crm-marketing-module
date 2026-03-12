@@ -14,7 +14,7 @@ import {
   Search,
 } from 'lucide-react'
 import { useState } from 'react'
-import { useToast } from '@/lib/ToastContext'
+import { useToast } from 'host/ToastContext'
 
 const campaigns = [
   { name: 'Q1 Product Launch', status: 'sent' as const, recipients: 2840, openRate: 68, clickRate: 24, sentAt: 'Feb 12, 2026' },
