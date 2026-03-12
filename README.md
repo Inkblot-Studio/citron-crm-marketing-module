@@ -43,9 +43,9 @@ The remote is served at `http://localhost:5001`. This is the URL the host will u
 
 ### What this remote exposes
 
-| Entry         | Content                                   |
-|---------------|-------------------------------------------|
-| `./Marketing` | `MarketingPage` component (default export) |
+| Entry         | Content                                                          |
+|---------------|------------------------------------------------------------------|
+| `./Marketing` | `MarketingWithProvider` (MarketingPage wrapped with ToastProvider + Toaster) |
 
 ### Remote entry URL
 
@@ -119,8 +119,10 @@ citron-crm-marketing-module/
 ├── frontend/
 │   ├── src/
 │   │   ├── marketing/
-│   │   │   └── MarketingPage.tsx    # Main page (exported as ./Marketing)
-│   │   ├── lib/                     # (reserved)
+│   │   │   ├── MarketingPage.tsx        # Main page
+│   │   │   └── MarketingWithProvider.tsx # Wrapped export (ToastProvider + Toaster)
+│   │   ├── lib/
+│   │   │   └── ToastContext.tsx         # Toast context (bundled with remote)
 │   │   ├── App.tsx                  # Shell for standalone development
 │   │   ├── main.tsx                 # Entry point
 │   │   └── index.css                # Styles (Tailwind + citron-ds)
@@ -165,30 +167,13 @@ For production, deploy the contents of `dist/` to a CDN or static server and use
 ┌─────────────────────────────────────────────────────────────┐
 │ Remote (this module)                                        │
 │                                                              │
-│  remoteEntry.js  exposes  ./Marketing  ──►  MarketingPage    │
-│                                                              │
-│  Dependencies: ToastContext, citron-ui, citron-ds           │
+│  remoteEntry.js  exposes  ./Marketing  ──►  MarketingWithProvider │
+│  (includes ToastProvider, Toaster, ToastContext)                 │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-## Host as remote (ToastContext)
-
-`MarketingPage` imports `useToast` from the host's `ToastContext` to avoid the "useToast must be used within ToastProvider" error. The marketing module consumes the host as a remote.
-
-### Environment variable
-
-Copy `.env.example` to `.env` and set the host URL:
-
-```
-VITE_HOST_URL=https://citron-crm.vercel.app
-```
-
-For local development, omit or leave empty to default to `http://localhost:5173` (host must be running there). For production builds, set `VITE_HOST_URL` to the deployed host URL.
-
-The host must expose `./ToastContext` in its federation config.
-
 ## Notes
 
-- **ToastProvider**: `MarketingPage` imports `useToast` from the host (`host/ToastContext`). The host must expose `ToastContext` and wrap the app in `ToastProvider`.
+- **ToastProvider**: The remote exports `MarketingWithProvider`, which bundles its own `ToastProvider`, `Toaster`, and `ToastContext`. The host needs no additional setup.
 - **Design system**: Styles depend on `@citron-systems/citron-ds`. Ensure the host imports its CSS (`import '@citron-systems/citron-ds/css'`).
 - **Port**: Preview uses port 5001. In dev (`npm run dev`), Vite uses 5173 by default.
