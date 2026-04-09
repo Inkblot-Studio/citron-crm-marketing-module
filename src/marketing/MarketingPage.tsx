@@ -1,5 +1,14 @@
-import { EmailBlockEditor, AIEmailGenerator } from '@citron-systems/citron-ui'
-import type { EmailBlock } from '@citron-systems/citron-ui'
+import {
+  EmailBlockEditor,
+  ModuleAssistantPanel,
+  AdvancedDropdown,
+  TemplateMasonryGrid,
+  Button,
+  SearchBar,
+  Collapsible,
+  Skeleton,
+} from '@citron-systems/citron-ui'
+import type { EmailBlock, ModuleAssistantMessage, TemplateMasonryItem } from '@citron-systems/citron-ui'
 import {
   Mail,
   Plus,
@@ -11,10 +20,10 @@ import {
   Eye,
   MousePointerClick,
   FileText,
-  Search,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useToast } from '@/lib/ToastContext'
+import { generateBlocksFromPrompt } from '@/lib/generateBlocks'
 import ContactsPage from './ContactsPage'
 
 const campaigns = [
@@ -25,11 +34,13 @@ const campaigns = [
   { name: 'Re-engagement Flow', status: 'sent' as const, recipients: 890, openRate: 45, clickRate: 12, sentAt: 'Feb 5, 2026' },
 ]
 
-const templates = [
-  { name: 'Welcome Series', category: 'Onboarding', uses: 34 },
-  { name: 'Product Announcement', category: 'Marketing', uses: 12 },
-  { name: 'Renewal Reminder', category: 'Retention', uses: 28 },
-  { name: 'Meeting Follow-up', category: 'Sales', uses: 56 },
+const templateItems: TemplateMasonryItem[] = [
+  { id: '1', title: 'Welcome Series', description: 'Onboarding flow for new users', category: 'Onboarding' },
+  { id: '2', title: 'Product Announcement', description: 'Announce new features to all users', category: 'Marketing' },
+  { id: '3', title: 'Renewal Reminder', description: 'Prompt customers before subscription expires', category: 'Retention' },
+  { id: '4', title: 'Meeting Follow-up', description: 'Post-meeting summary and next steps', category: 'Sales' },
+  { id: '5', title: 'Re-engagement', description: 'Win back dormant users', category: 'Retention' },
+  { id: '6', title: 'Event Invitation', description: 'Drive attendance to webinars and events', category: 'Marketing' },
 ]
 
 const statusConfig = {
@@ -41,7 +52,6 @@ const statusConfig = {
 }
 
 type Tab = 'campaigns' | 'contacts' | 'templates' | 'compose'
-type ComposeMode = 'blocks' | 'ai'
 
 const TAB_ORDER: Tab[] = ['campaigns', 'contacts', 'templates', 'compose']
 const TAB_LABELS: Record<Tab, string> = {
@@ -51,18 +61,115 @@ const TAB_LABELS: Record<Tab, string> = {
   compose: 'Compose',
 }
 
+const MOCK_RECIPIENTS = [
+  { name: 'Sarah Chen', email: 'sarah@acme.com', company: 'Acme Corp', tags: ['Champion'] },
+  { name: 'Marcus Johnson', email: 'marcus@techventures.io', company: 'TechVentures', tags: ['Technical Buyer'] },
+  { name: 'Elena Rodriguez', email: 'elena@globaltech.com', company: 'GlobalTech Inc', tags: ['At Risk'] },
+  { name: 'David Park', email: 'david@dataflow.dev', company: 'DataFlow Labs', tags: ['Executive Sponsor'] },
+  { name: 'Lisa Wang', email: 'lisa@startupxyz.com', company: 'StartupXYZ', tags: ['Champion', 'Budget Holder'] },
+]
+
+const CUSTOMER_TYPES = [
+  { value: 'all', label: 'All customers' },
+  { value: 'enterprise', label: 'Enterprise', description: '100+ seats' },
+  { value: 'mid-market', label: 'Mid-Market', description: '20–99 seats' },
+  { value: 'smb', label: 'SMB', description: '1–19 seats' },
+  { value: 'trial', label: 'Trial users', description: 'Free tier' },
+]
+
+const SEGMENTS = [
+  { value: 'all', label: 'All segments' },
+  { value: 'active', label: 'Active', description: 'Logged in last 7 days' },
+  { value: 'dormant', label: 'Dormant', description: 'No activity 30+ days' },
+  { value: 'champion', label: 'Champions', description: 'High engagement score' },
+  { value: 'at-risk', label: 'At Risk', description: 'Declining engagement' },
+]
+
 export default function MarketingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('campaigns')
-  const [composeMode, setComposeMode] = useState<ComposeMode>('blocks')
   const [blocks, setBlocks] = useState<EmailBlock[]>([])
   const [subject, setSubject] = useState('')
+  const [recipientQuery, setRecipientQuery] = useState('')
+  const [customerType, setCustomerType] = useState<string | null>(null)
+  const [segment, setSegment] = useState<string | null>(null)
+  const [assistantMessages, setAssistantMessages] = useState<ModuleAssistantMessage[]>([])
+  const [assistantProcessing, setAssistantProcessing] = useState(false)
+  const [showAssistant, setShowAssistant] = useState(false)
+  const [templatesLoading, setTemplatesLoading] = useState(false)
   const { addToast } = useToast()
+
+  const filteredRecipients = useMemo(() => {
+    const q = recipientQuery.toLowerCase()
+    if (!q) return MOCK_RECIPIENTS
+    return MOCK_RECIPIENTS.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.company.toLowerCase().includes(q) ||
+        r.tags.some((t) => t.toLowerCase().includes(q))
+    )
+  }, [recipientQuery])
+
+  const handleAssistantSend = useCallback(async (content: string) => {
+    const userMsg: ModuleAssistantMessage = { id: crypto.randomUUID(), role: 'user', content }
+    setAssistantMessages((prev) => [...prev, userMsg])
+    setAssistantProcessing(true)
+
+    try {
+      const newBlocks = await generateBlocksFromPrompt(content)
+      setBlocks(newBlocks)
+      const reply: ModuleAssistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: `Done — generated ${newBlocks.length} blocks. The editor has been updated.`,
+      }
+      setAssistantMessages((prev) => [...prev, reply])
+      addToast({ title: 'Blocks generated', description: `${newBlocks.length} blocks added to editor`, variant: 'success' })
+    } catch {
+      const errMsg: ModuleAssistantMessage = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: 'Something went wrong generating the blocks. Try again.',
+      }
+      setAssistantMessages((prev) => [...prev, errMsg])
+    } finally {
+      setAssistantProcessing(false)
+    }
+  }, [addToast])
+
+  const handleGenerateWithAI = useCallback(() => {
+    setShowAssistant(true)
+    const prompt = subject.trim()
+      ? `Draft email blocks for: "${subject}"`
+      : 'Draft a professional marketing email with heading, body, image, and CTA'
+    handleAssistantSend(prompt)
+  }, [subject, handleAssistantSend])
+
+  const handleTemplateGenerateAI = useCallback(async (item: TemplateMasonryItem) => {
+    setTemplatesLoading(true)
+    addToast({ title: 'AI generation started', description: `Generating "${item.title}"…`, variant: 'info' })
+    const newBlocks = await generateBlocksFromPrompt(`Create email template: ${item.title} — ${item.description ?? ''}`)
+    setBlocks(newBlocks)
+    setTemplatesLoading(false)
+    setActiveTab('compose')
+    addToast({ title: 'Template loaded', description: `${newBlocks.length} blocks ready in editor`, variant: 'success' })
+  }, [addToast])
+
+  const handleTemplateSelect = useCallback((item: TemplateMasonryItem) => {
+    addToast({ title: `Template "${item.title}" selected`, variant: 'info' })
+  }, [addToast])
 
   const handleSendNow = () => addToast({ title: 'Campaign sent', description: 'Your email campaign has been queued for delivery.', variant: 'success' })
   const handleSchedule = () => addToast({ title: 'Campaign scheduled', description: 'Select a date and time to schedule.', variant: 'info' })
   const handleSaveDraft = () => addToast({ title: 'Draft saved', variant: 'success' })
-  const handleGenerateWithAI = () => addToast({ title: 'AI generation started', description: 'Your template will be ready shortly.', variant: 'info' })
-  const handleTemplateClick = (name: string) => addToast({ title: `Template "${name}" selected`, variant: 'info' })
+
+  const blockPreview = useMemo(() => {
+    if (!blocks.length) return null
+    return blocks
+      .filter((b) => b.content)
+      .map((b) => (b.type === 'heading' ? `# ${b.content}` : b.type === 'button' ? `[${b.content}]` : b.content))
+      .join('\n\n')
+  }, [blocks])
 
   return (
     <div className="h-full flex flex-col">
@@ -76,13 +183,10 @@ export default function MarketingPage() {
             <p className="text-xs text-muted-foreground mt-0.5">Campaigns, contacts, templates, and compose</p>
           </div>
         </div>
-        <button
-          onClick={() => setActiveTab('compose')}
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="w-3 h-3" />
+        <Button onClick={() => setActiveTab('compose')}>
+          <Plus className="w-3 h-3 mr-1.5" />
           New Campaign
-        </button>
+        </Button>
       </header>
 
       <div className="px-8 py-3 border-b border-border flex gap-1">
@@ -103,12 +207,12 @@ export default function MarketingPage() {
         className={
           activeTab === 'contacts'
             ? 'flex-1 flex flex-col min-h-0 overflow-hidden px-8 py-6'
-            : 'flex-1 overflow-y-auto hide-scrollbar px-8 py-6'
+            : activeTab === 'compose'
+              ? 'flex-1 flex min-h-0 overflow-hidden'
+              : 'flex-1 overflow-y-auto hide-scrollbar px-8 py-6'
         }
       >
-        {activeTab === 'contacts' && (
-          <ContactsPage embedded />
-        )}
+        {activeTab === 'contacts' && <ContactsPage embedded />}
 
         {activeTab === 'campaigns' && (
           <>
@@ -159,96 +263,136 @@ export default function MarketingPage() {
 
         {activeTab === 'templates' && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email Templates</h2>
-              <button
-                onClick={handleGenerateWithAI}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary text-xs text-foreground hover:bg-secondary/80 transition-colors"
-              >
-                <Sparkles className="w-3 h-3 text-citrus-lemon" />
-                Generate with AI
-              </button>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {templates.map((t) => (
-                <div key={t.name} onClick={() => handleTemplateClick(t.name)} className="glass rounded-xl p-5 hover:bg-secondary/20 transition-colors cursor-pointer">
-                  <div className="flex items-center justify-between mb-3">
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-secondary-foreground">{t.category}</span>
-                    <span className="text-[10px] text-muted-foreground">{t.uses} uses</span>
-                  </div>
-                  <h3 className="text-sm font-semibold text-foreground">{t.name}</h3>
-                  <div className="mt-3 h-16 rounded-md bg-surface-2 border border-border/50 flex items-center justify-center">
-                    <FileText className="w-5 h-5 text-muted-foreground/40" />
-                  </div>
-                </div>
-              ))}
-            </div>
+            {templatesLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className="h-40 rounded-xl" />
+                ))}
+              </div>
+            ) : (
+              <TemplateMasonryGrid
+                items={templateItems}
+                columns={3}
+                onSelect={handleTemplateSelect}
+                onGenerateWithAI={handleTemplateGenerateAI}
+              />
+            )}
           </div>
         )}
 
         {activeTab === 'compose' && (
-          <div className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground uppercase tracking-wider">Subject Line</label>
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full bg-surface-1 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                placeholder="Enter subject line..."
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground uppercase tracking-wider mr-2">Editor Mode</span>
-              {(['blocks', 'ai'] as ComposeMode[]).map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setComposeMode(mode)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    composeMode === mode ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-                  }`}
-                >
-                  {mode === 'blocks' ? 'Drag & Drop' : 'AI Generate'}
-                </button>
-              ))}
-            </div>
-
-            {composeMode === 'blocks' && (
-              <EmailBlockEditor blocks={blocks} onBlocksChange={setBlocks} />
-            )}
-
-            {composeMode === 'ai' && (
-              <AIEmailGenerator
-                onGenerate={(newBlocks) => {
-                  setBlocks(newBlocks)
-                  setComposeMode('blocks')
-                }}
-              />
-            )}
-
-            <div className="space-y-3">
-              <label className="text-xs text-muted-foreground uppercase tracking-wider">Recipients</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <div className="flex flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto hide-scrollbar px-8 py-6 space-y-6">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Subject Line</label>
                 <input
-                  className="w-full bg-surface-1 border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  placeholder="Search contacts, segments, or tags..."
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="w-full bg-surface-1 border border-border rounded-lg px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  placeholder="Enter subject line..."
                 />
               </div>
+
+              <EmailBlockEditor blocks={blocks} onBlocksChange={setBlocks} />
+
+              <div className="flex items-center gap-3">
+                <Button variant="secondary" onClick={handleGenerateWithAI}>
+                  <Sparkles className="w-3 h-3 mr-1.5" />
+                  Generate with AI
+                </Button>
+                {!showAssistant && (
+                  <button
+                    onClick={() => setShowAssistant(true)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    Open assistant panel
+                  </button>
+                )}
+              </div>
+
+              {blockPreview && (
+                <Collapsible title="Preview" defaultOpen={false}>
+                  <pre className="text-xs text-muted-foreground whitespace-pre-wrap p-4 bg-surface-1 rounded-lg border border-border mt-2 max-h-48 overflow-y-auto">
+                    {blockPreview}
+                  </pre>
+                </Collapsible>
+              )}
+
+              <div className="space-y-3">
+                <label className="text-xs text-muted-foreground uppercase tracking-wider">Recipients</label>
+                <SearchBar
+                  value={recipientQuery}
+                  onChange={(e) => setRecipientQuery(e.target.value)}
+                  placeholder="Search by name, email, company, or tag…"
+                />
+                <div className="flex flex-wrap gap-3">
+                  <div className="w-48">
+                    <AdvancedDropdown
+                      options={CUSTOMER_TYPES}
+                      value={customerType ?? undefined}
+                      onChange={setCustomerType}
+                      placeholder="Customer type"
+                      clearable
+                    />
+                  </div>
+                  <div className="w-48">
+                    <AdvancedDropdown
+                      options={SEGMENTS}
+                      value={segment ?? undefined}
+                      onChange={setSegment}
+                      placeholder="Segment"
+                      clearable
+                    />
+                  </div>
+                </div>
+                {recipientQuery && (
+                  <div className="glass rounded-lg max-h-36 overflow-y-auto">
+                    {filteredRecipients.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-muted-foreground">No contacts match your search.</p>
+                    ) : (
+                      filteredRecipients.map((r) => (
+                        <div key={r.email} className="flex items-center justify-between px-4 py-2 border-b border-border/50 last:border-0 hover:bg-secondary/20 transition-colors">
+                          <div>
+                            <span className="text-sm font-medium text-foreground">{r.name}</span>
+                            <span className="text-[10px] text-muted-foreground ml-2">{r.email}</span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground">{r.company}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button onClick={handleSendNow}>
+                  <Send className="w-3 h-3 mr-1.5" />
+                  Send Now
+                </Button>
+                <Button variant="secondary" onClick={handleSchedule}>
+                  <Clock className="w-3 h-3 mr-1.5" />
+                  Schedule
+                </Button>
+                <button onClick={handleSaveDraft} className="px-4 py-2 rounded-lg border border-border text-muted-foreground text-xs font-medium hover:bg-secondary/30 transition-colors">
+                  Save Draft
+                </button>
+              </div>
             </div>
-            <div className="flex gap-3 pt-2">
-              <button onClick={handleSendNow} className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors flex items-center gap-2">
-                <Send className="w-3 h-3" />
-                Send Now
-              </button>
-              <button onClick={handleSchedule} className="px-4 py-2 rounded-lg bg-secondary text-secondary-foreground text-xs font-medium hover:bg-secondary/80 transition-colors flex items-center gap-2">
-                <Clock className="w-3 h-3" />
-                Schedule
-              </button>
-              <button onClick={handleSaveDraft} className="px-4 py-2 rounded-lg border border-border text-muted-foreground text-xs font-medium hover:bg-secondary/30 transition-colors">
-                Save Draft
-              </button>
-            </div>
+
+            {showAssistant && (
+              <div className="w-80 xl:w-96 border-l border-border flex-shrink-0">
+                <ModuleAssistantPanel
+                  moduleId="marketing"
+                  moduleLabel="Marketing"
+                  agentLabel="Marketing AI"
+                  messages={assistantMessages}
+                  onSend={handleAssistantSend}
+                  isProcessing={assistantProcessing}
+                  placeholder="Ask the assistant to generate email content…"
+                  onClose={() => setShowAssistant(false)}
+                />
+              </div>
+            )}
           </div>
         )}
       </div>
