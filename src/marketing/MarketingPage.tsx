@@ -1,6 +1,5 @@
 import {
   EmailBlockEditor,
-  ModuleAssistantPanel,
   AdvancedDropdown,
   TemplateMasonryGrid,
   Button,
@@ -8,7 +7,7 @@ import {
   Collapsible,
   Skeleton,
 } from '@citron-systems/citron-ui'
-import type { EmailBlock, ModuleAssistantMessage, TemplateMasonryItem } from '@citron-systems/citron-ui'
+import type { EmailBlock, TemplateMasonryItem } from '@citron-systems/citron-ui'
 import {
   Mail,
   Plus,
@@ -21,9 +20,9 @@ import {
   MousePointerClick,
   FileText,
 } from 'lucide-react'
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import { useToast } from '@/lib/ToastContext'
-import { generateBlocksFromPrompt } from '@/lib/generateBlocks'
+import { useMarketingAssistant } from './MarketingAssistantContext'
 import ContactsPage from './ContactsPage'
 
 const campaigns = [
@@ -85,21 +84,29 @@ const SEGMENTS = [
   { value: 'at-risk', label: 'At Risk', description: 'Declining engagement' },
 ]
 
+function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const id = setTimeout(() => setDebounced(value), delayMs)
+    return () => clearTimeout(id)
+  }, [value, delayMs])
+  return debounced
+}
+
 export default function MarketingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('campaigns')
   const [blocks, setBlocks] = useState<EmailBlock[]>([])
   const [subject, setSubject] = useState('')
   const [recipientQuery, setRecipientQuery] = useState('')
+  const debouncedQuery = useDebouncedValue(recipientQuery, 200)
   const [customerType, setCustomerType] = useState<string | null>(null)
   const [segment, setSegment] = useState<string | null>(null)
-  const [assistantMessages, setAssistantMessages] = useState<ModuleAssistantMessage[]>([])
-  const [assistantProcessing, setAssistantProcessing] = useState(false)
-  const [showAssistant, setShowAssistant] = useState(false)
-  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [templatesLoading] = useState(false)
   const { addToast } = useToast()
+  const { openAssistant, registerHandlers } = useMarketingAssistant()
 
   const filteredRecipients = useMemo(() => {
-    const q = recipientQuery.toLowerCase()
+    const q = debouncedQuery.toLowerCase()
     if (!q) return MOCK_RECIPIENTS
     return MOCK_RECIPIENTS.filter(
       (r) =>
@@ -108,52 +115,43 @@ export default function MarketingPage() {
         r.company.toLowerCase().includes(q) ||
         r.tags.some((t) => t.toLowerCase().includes(q))
     )
-  }, [recipientQuery])
+  }, [debouncedQuery])
 
-  const handleAssistantSend = useCallback(async (content: string) => {
-    const userMsg: ModuleAssistantMessage = { id: crypto.randomUUID(), role: 'user', content }
-    setAssistantMessages((prev) => [...prev, userMsg])
-    setAssistantProcessing(true)
+  const handleMoveBlock = useCallback((id: string, direction: -1 | 1) => {
+    setBlocks((prev) => {
+      const idx = prev.findIndex((b) => b.id === id)
+      if (idx < 0) return prev
+      const target = idx + direction
+      if (target < 0 || target >= prev.length) return prev
+      const next = [...prev]
+      const tmp = next[idx]!
+      next[idx] = next[target]!
+      next[target] = tmp
+      return next
+    })
+  }, [])
 
-    try {
-      const newBlocks = await generateBlocksFromPrompt(content)
-      setBlocks(newBlocks)
-      const reply: ModuleAssistantMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: `Done — generated ${newBlocks.length} blocks. The editor has been updated.`,
-      }
-      setAssistantMessages((prev) => [...prev, reply])
-      addToast({ title: 'Blocks generated', description: `${newBlocks.length} blocks added to editor`, variant: 'success' })
-    } catch {
-      const errMsg: ModuleAssistantMessage = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: 'Something went wrong generating the blocks. Try again.',
-      }
-      setAssistantMessages((prev) => [...prev, errMsg])
-    } finally {
-      setAssistantProcessing(false)
-    }
-  }, [addToast])
+  const blocksRef = useRef(setBlocks)
+  blocksRef.current = setBlocks
+
+  useEffect(() => {
+    registerHandlers({
+      setBlocks: (b) => blocksRef.current(b),
+      addToast: (t) => addToast(t),
+    })
+  }, [registerHandlers, addToast])
 
   const handleGenerateWithAI = useCallback(() => {
-    setShowAssistant(true)
     const prompt = subject.trim()
       ? `Draft email blocks for: "${subject}"`
       : 'Draft a professional marketing email with heading, body, image, and CTA'
-    handleAssistantSend(prompt)
-  }, [subject, handleAssistantSend])
+    openAssistant(prompt)
+  }, [subject, openAssistant])
 
-  const handleTemplateGenerateAI = useCallback(async (item: TemplateMasonryItem) => {
-    setTemplatesLoading(true)
-    addToast({ title: 'AI generation started', description: `Generating "${item.title}"…`, variant: 'info' })
-    const newBlocks = await generateBlocksFromPrompt(`Create email template: ${item.title} — ${item.description ?? ''}`)
-    setBlocks(newBlocks)
-    setTemplatesLoading(false)
+  const handleTemplateGenerateAI = useCallback((item: TemplateMasonryItem) => {
     setActiveTab('compose')
-    addToast({ title: 'Template loaded', description: `${newBlocks.length} blocks ready in editor`, variant: 'success' })
-  }, [addToast])
+    openAssistant(`Create email template: ${item.title} — ${item.description ?? ''}`)
+  }, [openAssistant])
 
   const handleTemplateSelect = useCallback((item: TemplateMasonryItem) => {
     addToast({ title: `Template "${item.title}" selected`, variant: 'info' })
@@ -293,21 +291,19 @@ export default function MarketingPage() {
                 />
               </div>
 
-              <EmailBlockEditor blocks={blocks} onBlocksChange={setBlocks} />
+              <EmailBlockEditor blocks={blocks} onBlocksChange={setBlocks} onMoveBlock={handleMoveBlock} />
 
               <div className="flex items-center gap-3">
                 <Button variant="secondary" onClick={handleGenerateWithAI}>
                   <Sparkles className="w-3 h-3 mr-1.5" />
                   Generate with AI
                 </Button>
-                {!showAssistant && (
-                  <button
-                    onClick={() => setShowAssistant(true)}
-                    className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    Open assistant panel
-                  </button>
-                )}
+                <button
+                  onClick={() => openAssistant()}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Open assistant
+                </button>
               </div>
 
               {blockPreview && (
@@ -325,27 +321,31 @@ export default function MarketingPage() {
                   onChange={(e) => setRecipientQuery(e.target.value)}
                   placeholder="Search by name, email, company, or tag…"
                 />
-                <div className="flex flex-wrap gap-3">
-                  <div className="w-48">
+                <div className="flex flex-wrap gap-3 items-end">
+                  <div className="w-52 space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Customer type</span>
                     <AdvancedDropdown
                       options={CUSTOMER_TYPES}
                       value={customerType ?? undefined}
                       onChange={setCustomerType}
-                      placeholder="Customer type"
+                      placeholder="All customers"
+                      searchPlaceholder="Filter customer types…"
                       clearable
                     />
                   </div>
-                  <div className="w-48">
+                  <div className="w-52 space-y-1">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Segmentation</span>
                     <AdvancedDropdown
                       options={SEGMENTS}
                       value={segment ?? undefined}
                       onChange={setSegment}
-                      placeholder="Segment"
+                      placeholder="All segments"
+                      searchPlaceholder="Filter segments…"
                       clearable
                     />
                   </div>
                 </div>
-                {recipientQuery && (
+                {debouncedQuery && (
                   <div className="glass rounded-lg max-h-36 overflow-y-auto">
                     {filteredRecipients.length === 0 ? (
                       <p className="px-4 py-3 text-xs text-muted-foreground">No contacts match your search.</p>
@@ -379,20 +379,6 @@ export default function MarketingPage() {
               </div>
             </div>
 
-            {showAssistant && (
-              <div className="w-80 xl:w-96 border-l border-border flex-shrink-0">
-                <ModuleAssistantPanel
-                  moduleId="marketing"
-                  moduleLabel="Marketing"
-                  agentLabel="Marketing AI"
-                  messages={assistantMessages}
-                  onSend={handleAssistantSend}
-                  isProcessing={assistantProcessing}
-                  placeholder="Ask the assistant to generate email content…"
-                  onClose={() => setShowAssistant(false)}
-                />
-              </div>
-            )}
           </div>
         )}
       </div>
