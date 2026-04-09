@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { useToast } from '@/lib/ToastContext'
+import ContactsPage from './ContactsPage'
 
 const campaigns = [
   { name: 'Q1 Product Launch', status: 'sent' as const, recipients: 2840, openRate: 68, clickRate: 24, sentAt: 'Feb 12, 2026' },
@@ -39,8 +40,16 @@ const statusConfig = {
   failed: { label: 'Failed', icon: XCircle, color: 'text-destructive' },
 }
 
-type Tab = 'campaigns' | 'templates' | 'compose'
+type Tab = 'campaigns' | 'contacts' | 'templates' | 'compose'
 type ComposeMode = 'blocks' | 'ai'
+
+const TAB_ORDER: Tab[] = ['campaigns', 'contacts', 'templates', 'compose']
+const TAB_LABELS: Record<Tab, string> = {
+  campaigns: 'Campaigns',
+  contacts: 'Contacts',
+  templates: 'Templates',
+  compose: 'Compose',
+}
 
 export default function MarketingPage() {
   const [activeTab, setActiveTab] = useState<Tab>('campaigns')
@@ -63,8 +72,8 @@ export default function MarketingPage() {
             <Mail className="w-4 h-4 text-citrus-orange" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">Email Campaigns</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Automate outreach · AI-powered templates</p>
+            <h1 className="text-lg font-semibold tracking-tight text-foreground">Marketing</h1>
+            <p className="text-xs text-muted-foreground mt-0.5">Campaigns, contacts, templates, and compose</p>
           </div>
         </div>
         <button
@@ -77,20 +86,30 @@ export default function MarketingPage() {
       </header>
 
       <div className="px-8 py-3 border-b border-border flex gap-1">
-        {(['campaigns', 'templates', 'compose'] as Tab[]).map((tab) => (
+        {TAB_ORDER.map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors capitalize ${
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
               activeTab === tab ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
             }`}
           >
-            {tab}
+            {TAB_LABELS[tab]}
           </button>
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto hide-scrollbar px-8 py-6">
+      <div
+        className={
+          activeTab === 'contacts'
+            ? 'flex-1 flex flex-col min-h-0 overflow-hidden px-8 py-6'
+            : 'flex-1 overflow-y-auto hide-scrollbar px-8 py-6'
+        }
+      >
+        {activeTab === 'contacts' && (
+          <ContactsPage embedded />
+        )}
+
         {activeTab === 'campaigns' && (
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">

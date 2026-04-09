@@ -1,6 +1,6 @@
 # Citron CRM — Marketing Module
 
-Standalone email campaigns module extracted from the Citron CRM monorepo. Served as a **remote** via Module Federation and exposes the `MarketingPage` component for consumption by a host (e.g. the main CRM app).
+Standalone **Marketing** module (campaigns, **Contacts**, templates, compose) extracted from the Citron CRM monorepo. Served as a **remote** via Module Federation and exposes `MarketingWithProvider` for consumption by a host (e.g. the main CRM app). Contacts UI is bundled here so it can be removed from the host CRM after deploy.
 
 ## Requirements
 
@@ -10,7 +10,6 @@ Standalone email campaigns module extracted from the Citron CRM monorepo. Served
 ## Installation
 
 ```bash
-cd frontend
 npm install
 ```
 
@@ -21,7 +20,6 @@ npm install
 To develop and test the module in isolation (without a host):
 
 ```bash
-cd frontend
 npm run dev
 ```
 
@@ -32,7 +30,6 @@ The app will be available at `http://localhost:5173`. It uses `ToastProvider` an
 To serve the built assets, including `remoteEntry.js`:
 
 ```bash
-cd frontend
 npm run build
 npm run preview
 ```
@@ -116,32 +113,29 @@ Ensure the host has compatible versions and declares them in `shared`. `@citron-
 
 ```
 citron-crm-marketing-module/
-├── frontend/
-│   ├── src/
-│   │   ├── marketing/
-│   │   │   ├── MarketingPage.tsx        # Main page
-│   │   │   └── MarketingWithProvider.tsx # Wrapped export (ToastProvider + Toaster)
-│   │   ├── lib/
-│   │   │   └── ToastContext.tsx         # Toast context (bundled with remote)
-│   │   ├── App.tsx                  # Shell for standalone development
-│   │   ├── main.tsx                 # Entry point
-│   │   └── index.css                # Styles (Tailwind + citron-ds)
-│   ├── index.html
-│   ├── vite.config.ts               # Module Federation config
-│   └── package.json
-├── backend/                         # Placeholder for future API
-│   └── package.json
+├── src/
+│   ├── marketing/
+│   │   ├── MarketingPage.tsx        # Tabs: Campaigns, Contacts, Templates, Compose
+│   │   ├── ContactsPage.tsx         # Contacts (from CRM; optional embedded layout)
+│   │   └── MarketingWithProvider.tsx # Wrapped export (ToastProvider + Toaster)
+│   ├── lib/
+│   │   └── ToastContext.tsx
+│   ├── App.tsx
+│   ├── main.tsx
+│   └── index.css
+├── index.html
+├── vite.config.ts
+├── package.json
 └── README.md
 ```
 
 ## Production build
 
 ```bash
-cd frontend
 npm run build
 ```
 
-Output in `frontend/dist/`:
+Output in `dist/`:
 
 - `index.html` — Standalone app
 - `assets/remoteEntry.js` — Remote entry point
@@ -177,3 +171,14 @@ For production, deploy the contents of `dist/` to a CDN or static server and use
 - **ToastProvider**: The remote exports `MarketingWithProvider`, which bundles its own `ToastProvider`, `Toaster`, and `ToastContext`. The host needs no additional setup.
 - **Design system**: Styles depend on `@citron-systems/citron-ds`. Ensure the host imports its CSS (`import '@citron-systems/citron-ds/css'`).
 - **Port**: Preview uses port 5001. In dev (`npm run dev`), Vite uses 5173 by default.
+
+## Removing Contacts from the host CRM
+
+After this marketing remote is deployed and the host loads it on `/campaigns` (or your chosen route), you can remove the duplicate Contacts module from **citron-crm**:
+
+1. Remove the `/contacts` route (lazy import of `ContactsPage`) and any `Route` that renders it.
+2. Remove the sidebar item (nav item) pointing to Contacts.
+3. Delete `src/pages/ContactsPage.tsx` from the CRM if it is no longer referenced elsewhere.
+4. Remove unused imports (e.g. `Users` icon) from `App.tsx` or navigation config.
+
+Keep the marketing remote URL in the host federation `remotes` configuration so the unified Marketing experience (including Contacts tab) remains available.
