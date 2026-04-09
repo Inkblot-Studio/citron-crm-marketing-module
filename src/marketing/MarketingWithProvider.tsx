@@ -8,21 +8,23 @@ function MarketingShell() {
   const { open, closeAssistant, messages, isProcessing, sendMessage } = useMarketingAssistant()
 
   return (
-    <div className="h-full flex">
-      <div className="flex-1 min-w-0 h-full">
-        <MarketingPage />
-      </div>
+    <>
+      <div className="h-full flex flex-row overflow-hidden">
+        <main className="flex-1 min-w-0 h-full overflow-hidden">
+          <MarketingPage />
+        </main>
 
-      <AssistantPanel
-        open={open}
-        onOpenChange={(v) => { if (!v) closeAssistant() }}
-        title="Marketing AI"
-        subtitle="Generate email content, templates, and more"
-        messages={messages}
-        onSend={({ text, files }) => sendMessage(text, files)}
-        isProcessing={isProcessing}
-        placeholder="Ask the assistant to generate email content…"
-      />
+        <AssistantPanel
+          open={open}
+          onOpenChange={(v) => { if (!v) closeAssistant() }}
+          title="Marketing AI"
+          subtitle="Generate email content, templates, and more"
+          messages={messages}
+          onSend={({ text, files }) => sendMessage(text, files)}
+          isProcessing={isProcessing}
+          placeholder="Ask the assistant to generate email content…"
+        />
+      </div>
 
       <Toaster
         toasts={toasts}
@@ -30,7 +32,7 @@ function MarketingShell() {
         onDismiss={dismissToast}
         className="fixed bottom-4 right-4 z-[100]"
       />
-    </div>
+    </>
   )
 }
 

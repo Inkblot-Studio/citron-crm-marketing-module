@@ -33,18 +33,28 @@ export function MarketingAssistantProvider({ children }: { children: ReactNode }
   const [messages, setMessages] = useState<AssistantMessage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const handlersRef = useRef<AssistantHandlers | null>(null)
+  const processingRef = useRef(false)
+  const requestIdRef = useRef(0)
 
   const registerHandlers = useCallback((h: AssistantHandlers) => {
     handlersRef.current = h
   }, [])
 
   const sendMessage = useCallback(async (text: string, _files?: File[]) => {
+    if (processingRef.current) return
+
     const userMsg: AssistantMessage = { id: crypto.randomUUID(), role: 'user', content: text }
     setMessages((prev) => [...prev, userMsg])
     setIsProcessing(true)
+    processingRef.current = true
+
+    const reqId = ++requestIdRef.current
 
     try {
       const newBlocks = await generateBlocksFromPrompt(text)
+
+      if (reqId !== requestIdRef.current) return
+
       handlersRef.current?.setBlocks(newBlocks)
 
       const reply: AssistantMessage = {
@@ -59,6 +69,8 @@ export function MarketingAssistantProvider({ children }: { children: ReactNode }
         variant: 'success',
       })
     } catch {
+      if (reqId !== requestIdRef.current) return
+
       const errMsg: AssistantMessage = {
         id: crypto.randomUUID(),
         role: 'assistant',
@@ -66,7 +78,10 @@ export function MarketingAssistantProvider({ children }: { children: ReactNode }
       }
       setMessages((prev) => [...prev, errMsg])
     } finally {
-      setIsProcessing(false)
+      if (reqId === requestIdRef.current) {
+        setIsProcessing(false)
+        processingRef.current = false
+      }
     }
   }, [])
 

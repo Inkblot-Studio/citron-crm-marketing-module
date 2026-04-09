@@ -101,7 +101,7 @@ export default function MarketingPage() {
   const debouncedQuery = useDebouncedValue(recipientQuery, 200)
   const [customerType, setCustomerType] = useState<string | null>(null)
   const [segment, setSegment] = useState<string | null>(null)
-  const [templatesLoading] = useState(false)
+  const templatesLoading = false
   const { addToast } = useToast()
   const { openAssistant, registerHandlers } = useMarketingAssistant()
 
@@ -181,10 +181,16 @@ export default function MarketingPage() {
             <p className="text-xs text-muted-foreground mt-0.5">Campaigns, contacts, templates, and compose</p>
           </div>
         </div>
-        <Button onClick={() => setActiveTab('compose')}>
-          <Plus className="w-3 h-3 mr-1.5" />
-          New Campaign
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => openAssistant()}>
+            <Sparkles className="w-3 h-3 mr-1.5" />
+            Open Assistant
+          </Button>
+          <Button onClick={() => setActiveTab('compose')}>
+            <Plus className="w-3 h-3 mr-1.5" />
+            New Campaign
+          </Button>
+        </div>
       </header>
 
       <div className="px-8 py-3 border-b border-border flex gap-1">
