@@ -1,6 +1,5 @@
 import {
   Button,
-  SearchBar,
   Skeleton,
   Resizable,
   Separator,
@@ -10,9 +9,7 @@ import {
   Badge,
   Label,
   Input,
-  Textarea,
   EmailComposeActionButtons,
-  ToggleGroup,
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
@@ -28,6 +25,7 @@ import {
   DialogFooter,
 } from '@citron-systems/citron-ui'
 import type { EmailBlock, BlockType } from '@citron-systems/citron-ui'
+import { AutoGrowTextarea } from '@/lib/AutoGrowTextarea'
 import {
   Mail,
   Plus,
@@ -38,12 +36,15 @@ import {
   Eye,
   MousePointerClick,
   FileText,
-  GripVertical,
   Trash2,
-  ChevronDown,
+  Users,
+  Search,
   Monitor,
   Tablet,
   Smartphone,
+  BarChart3,
+  LayoutTemplate,
+  type LucideIcon,
 } from 'lucide-react'
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd'
 import { useState, useMemo, useCallback, useEffect } from 'react'
@@ -208,12 +209,18 @@ const statusConfig = {
 
 type Tab = 'campaigns' | 'contacts' | 'templates' | 'compose'
 
-const TAB_ORDER: Tab[] = ['campaigns', 'contacts', 'templates', 'compose']
+const MAIN_TAB_ORDER: Exclude<Tab, 'compose'>[] = ['campaigns', 'contacts', 'templates']
 const TAB_LABELS: Record<Tab, string> = {
   campaigns: 'Campaigns',
   contacts: 'Contacts',
   templates: 'Templates',
   compose: 'Compose',
+}
+
+const MAIN_TAB_ICONS: Record<Exclude<Tab, 'compose'>, LucideIcon> = {
+  campaigns: BarChart3,
+  contacts: Users,
+  templates: LayoutTemplate,
 }
 
 type Recipient = {
@@ -234,6 +241,30 @@ const MOCK_RECIPIENTS: Recipient[] = [
   { id: 'r5', name: 'Lisa Wang', email: 'lisa@startupxyz.com', company: 'StartupXYZ', tags: ['Champion', 'Budget Holder'], customerType: 'trial', segments: ['active'] },
 ]
 
+function recipientInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  const a = parts[0]?.[0]
+  const b = parts.length > 1 ? parts[parts.length - 1]?.[0] : parts[0]?.[1]
+  return `${a ?? ''}${b ?? ''}`.toUpperCase() || '?'
+}
+
+function recipientTierLabel(customerType: Recipient['customerType']): string {
+  return CUSTOMER_TOGGLE_ITEMS.find((i) => i.id === customerType)?.label ?? customerType
+}
+
+function segmentDisplayLabel(segmentId: string): string {
+  return SEGMENT_TOGGLE_ITEMS.find((s) => s.id === segmentId)?.label ?? segmentId
+}
+
+const RECIPIENT_FILTER_PILL_BASE =
+  'shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+function recipientFilterPillClasses(active: boolean): string {
+  return active
+    ? `${RECIPIENT_FILTER_PILL_BASE} border-citrus-orange/30 bg-citrus-orange/15 text-citrus-orange`
+    : `${RECIPIENT_FILTER_PILL_BASE} border-border/35 bg-muted/40 text-muted-foreground hover:border-border/55 hover:bg-muted/55 hover:text-foreground`
+}
+
 const CUSTOMER_TOGGLE_ITEMS = [
   { id: 'all', label: 'All tiers' },
   { id: 'enterprise', label: 'Enterprise' },
@@ -248,6 +279,9 @@ const SEGMENT_TOGGLE_ITEMS = [
   { id: 'champion', label: 'Champions' },
   { id: 'at-risk', label: 'At risk' },
 ]
+
+/** Shared width for compose collapsibles, email body blocks, and related sections. */
+const COMPOSE_FORM_INNER = 'mx-auto w-full max-w-2xl space-y-5 px-3 py-4 pb-8 sm:px-5 sm:py-5 sm:pb-10'
 
 const ALL_BLOCK_TYPES: BlockType[] = ['heading', 'text', 'image', 'button', 'divider', 'columns']
 
@@ -281,19 +315,29 @@ function StaticEmailBlocks({
   blocks,
   device,
   keyPrefix,
+  variant = 'default',
 }: {
   blocks: EmailBlock[]
   device: PreviewDevice
   keyPrefix: string
+  /** Live preview: tipografía más marcada (negrita / foreground). */
+  variant?: 'default' | 'live'
 }) {
+  const live = variant === 'live'
+  const headingWeight = live ? 'font-extrabold' : 'font-bold'
   const headingClass =
     device === 'mobile'
-      ? 'text-lg font-bold leading-snug text-foreground'
+      ? `text-lg ${headingWeight} leading-snug text-foreground`
       : device === 'tablet'
-        ? 'text-xl font-bold leading-tight text-foreground'
-        : 'text-2xl font-bold leading-tight text-foreground'
-  const bodyClass =
-    device === 'mobile' ? 'text-xs leading-relaxed text-muted-foreground' : 'text-sm leading-relaxed text-muted-foreground'
+        ? `text-xl ${headingWeight} leading-tight text-foreground`
+        : `text-2xl ${headingWeight} leading-tight text-foreground`
+  const bodyClass = live
+    ? device === 'mobile'
+      ? 'text-xs font-semibold leading-relaxed text-foreground'
+      : 'text-sm font-semibold leading-relaxed text-foreground'
+    : device === 'mobile'
+      ? 'text-xs leading-relaxed text-muted-foreground'
+      : 'text-sm leading-relaxed text-muted-foreground'
 
   return (
     <>
@@ -320,9 +364,9 @@ function StaticEmailBlocks({
           return (
             <div key={key} className="text-center">
               <span
-                className={`inline-block rounded-md bg-primary font-medium text-primary-foreground ${
-                  device === 'mobile' ? 'px-4 py-2 text-xs' : 'px-6 py-2.5 text-sm'
-                }`}
+                className={`inline-block rounded-md bg-primary text-primary-foreground ${
+                  live ? 'font-bold' : 'font-medium'
+                } ${device === 'mobile' ? 'px-4 py-2 text-xs' : 'px-6 py-2.5 text-sm'}`}
               >
                 {b.content || 'Button'}
               </span>
@@ -337,7 +381,7 @@ function StaticEmailBlocks({
           return (
             <div
               key={key}
-              className={`grid grid-cols-2 gap-3 text-muted-foreground ${device === 'mobile' ? 'gap-2 text-[11px]' : 'text-sm'}`}
+              className={`grid grid-cols-2 gap-3 ${live ? 'font-medium text-foreground' : 'text-muted-foreground'} ${device === 'mobile' ? 'gap-2 text-[11px]' : 'text-sm'}`}
             >
               <p className="rounded-md bg-secondary/50 p-2 sm:p-3">{L || 'Left column'}</p>
               <p className="rounded-md bg-secondary/50 p-2 sm:p-3">{R || 'Right column'}</p>
@@ -350,44 +394,151 @@ function StaticEmailBlocks({
   )
 }
 
-/** Fixed chrome + scroll body so every template card matches in height. */
-const TEMPLATE_CARD_PREVIEW_TOTAL_H = 420
+/** Compact template preview: email body only, fixed height + scroll. */
+const TEMPLATE_CARD_PREVIEW_TOTAL_H = 300
 const TEMPLATE_CARD_PREVIEW_SCROLL_H = 300
 
-function TemplateCardEmailPreview({
-  templateId,
-  subject,
-  preheader,
-  blocks,
-}: {
-  templateId: string
-  subject: string
-  preheader: string
-  blocks: EmailBlock[]
-}) {
+function TemplateCardEmailPreview({ templateId, blocks }: { templateId: string; blocks: EmailBlock[] }) {
   return (
     <div
-      className="flex flex-col overflow-hidden rounded-xl border border-border bg-background shadow-sm"
+      className="flex flex-col overflow-hidden rounded-lg border border-border/40 bg-white shadow-sm"
       style={{ height: TEMPLATE_CARD_PREVIEW_TOTAL_H }}
     >
-      <div className="shrink-0 border-b border-border bg-muted/40 px-4 py-2.5">
-        <p className="text-xs text-muted-foreground">
-          <span className="font-medium text-foreground">Citron Marketing</span>
-          <span> · marketing@citron.example</span>
-        </p>
-        <p className="mt-0.5 line-clamp-2 text-sm font-semibold text-foreground">{subject || '(No subject)'}</p>
-        {preheader ? <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted-foreground">{preheader}</p> : null}
-      </div>
-      <ScrollArea className="w-full shrink-0" style={{ height: TEMPLATE_CARD_PREVIEW_SCROLL_H }} maxHeight={`${TEMPLATE_CARD_PREVIEW_SCROLL_H}px`}>
-        <div className="bg-background px-4 py-4 sm:px-5">
-          <div className="mx-auto max-w-[560px] space-y-4 rounded-lg border border-border bg-surface-1 px-5 py-6 sm:px-6 sm:py-8">
+      <ScrollArea className="w-full min-h-0 flex-1" style={{ height: TEMPLATE_CARD_PREVIEW_SCROLL_H }} maxHeight={`${TEMPLATE_CARD_PREVIEW_SCROLL_H}px`}>
+        <div className="bg-white px-3 py-3 sm:px-5">
+          <div className="mx-auto max-w-[540px] space-y-3 rounded-md border border-border/30 bg-white px-4 py-5">
             <StaticEmailBlocks blocks={blocks} device="desktop" keyPrefix={templateId} />
           </div>
         </div>
       </ScrollArea>
-      <p className="mt-auto shrink-0 border-t border-border bg-muted/20 px-3 py-1.5 text-center text-[9px] text-muted-foreground">
-        Scroll to see the full message
-      </p>
+    </div>
+  )
+}
+
+/** Mirrors `Card` + `TemplateCardEmailPreview` + `CardContent` (badge, title, description, actions). */
+function MarketingTemplateCardSkeleton() {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-border/35 bg-white shadow-sm">
+      <div className="p-2 sm:p-3">
+        <Skeleton className="w-full rounded-lg" style={{ height: TEMPLATE_CARD_PREVIEW_TOTAL_H }} />
+      </div>
+      <div className="flex flex-1 flex-col space-y-2 p-3 pt-0 sm:p-4 sm:pt-0">
+        <Skeleton className="h-5 w-20 rounded-md" />
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-48 max-w-[85%] rounded-md" />
+          <Skeleton className="h-3 w-full max-w-md rounded-md" />
+          <Skeleton className="h-3 w-full max-w-sm rounded-md" />
+        </div>
+        <div className="mt-auto flex gap-2 pt-1">
+          <Skeleton className="h-10 min-w-0 flex-1 rounded-lg" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** KPI row + campaign table header and rows (same grid as loaded tab). */
+function CampaignsTabSkeleton() {
+  return (
+    <>
+      <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="glass rounded-xl p-4">
+            <Skeleton className="h-3 w-28 rounded" />
+            <Skeleton className="mt-3 h-8 w-16 rounded-md" />
+            <Skeleton className="mt-2 h-3 w-32 rounded" />
+          </div>
+        ))}
+      </div>
+      <div className="glass rounded-xl overflow-hidden">
+        <div className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 border-b border-border px-5 py-3">
+          <Skeleton className="h-3 w-20 rounded" />
+          <Skeleton className="h-3 w-12 rounded" />
+          <Skeleton className="h-3 w-10 rounded" />
+          <Skeleton className="h-3 w-12 rounded" />
+          <Skeleton className="h-3 w-14 rounded" />
+        </div>
+        {Array.from({ length: 5 }).map((_, ri) => (
+          <div
+            key={ri}
+            className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 border-b border-border/50 px-5 py-3.5"
+          >
+            <div className="min-w-0 space-y-2">
+              <Skeleton className="h-4 w-full max-w-[14rem] rounded-md" />
+              <Skeleton className="h-3 w-24 rounded" />
+            </div>
+            <Skeleton className="h-4 w-16 rounded-md" />
+            <Skeleton className="h-4 w-10 rounded-md" />
+            <Skeleton className="h-4 w-10 rounded-md" />
+            <Skeleton className="h-4 w-24 rounded-md" />
+          </div>
+        ))}
+      </div>
+    </>
+  )
+}
+
+/** Compose: primary form column + live preview (matches `Resizable` + scroll areas). */
+function ComposeTabSkeleton({ isLg }: { isLg: boolean }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="min-h-0 flex-1">
+        <div
+          className={`flex h-full min-h-0 flex-col gap-0 ${isLg ? 'lg:flex-row' : ''} [&>div:first-child]:border-0 [&>div:first-child]:shadow-none [&>div:first-child]:ring-0`}
+        >
+          <div
+            className={`min-h-0 min-w-0 overflow-hidden ${isLg ? 'lg:w-[58%] lg:flex-none' : 'border-b border-border pb-2'}`}
+          >
+            <ScrollArea
+              className={`h-full max-h-[calc(100vh-5.5rem)] border-0 bg-transparent shadow-none ring-0 ${isLg ? 'pr-3' : 'pb-2'}`}
+              maxHeight="calc(100vh - 5.5rem)"
+            >
+              <div className={COMPOSE_FORM_INNER}>
+                <div className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5">
+                  <Skeleton className="h-3 w-40 rounded" />
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <Skeleton className="h-10 w-full rounded-lg md:col-span-2" />
+                    <Skeleton className="h-10 w-full rounded-lg md:col-span-2" />
+                    <Skeleton className="h-10 w-full rounded-lg md:col-span-2" />
+                  </div>
+                </div>
+                <Skeleton className="h-24 w-full rounded-xl" />
+                <div className="rounded-xl bg-surface-1/35 px-4 py-4 sm:px-5">
+                  <Skeleton className="h-3 w-28 rounded" />
+                  <div className="mt-3 flex items-start gap-3">
+                    <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+                    <Skeleton className="h-36 min-w-0 flex-1 rounded-xl" />
+                  </div>
+                </div>
+                <Skeleton className="h-28 w-full rounded-xl" />
+              </div>
+            </ScrollArea>
+          </div>
+          <div className={`min-h-0 min-w-0 flex-1 overflow-hidden ${isLg ? 'lg:w-[42%] lg:flex-none' : ''}`}>
+            <ScrollArea
+              className={`h-full max-h-[calc(100vh-5.5rem)] border-0 bg-transparent shadow-none ring-0 outline-none ${isLg ? 'pl-3 pr-2' : 'px-3'}`}
+              maxHeight="calc(100vh - 5.5rem)"
+            >
+              <div className={`mx-auto flex w-full max-w-2xl flex-col ${isLg ? 'sticky top-0 py-4' : 'py-4'}`}>
+                <div className="px-1 pb-4 pt-1 sm:px-2">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <Skeleton className="h-3 w-28 rounded" />
+                    <div className="flex w-fit shrink-0 gap-0.5 rounded-full border border-border/30 bg-muted/25 p-0.5">
+                      <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                      <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                      <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                    </div>
+                  </div>
+                </div>
+                <div className="min-h-[min(60vh,580px)] px-2 py-8 sm:min-h-[min(65vh,640px)] sm:px-4 sm:py-10">
+                  <Skeleton className="mx-auto min-h-[min(52vh,520px)] w-full max-w-[560px] rounded-2xl sm:min-h-[min(58vh,600px)]" />
+                </div>
+              </div>
+            </ScrollArea>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -431,7 +582,7 @@ function MarketingComposeBlocks({
   }
 
   const renderBlockFields = (b: EmailBlock) => (
-    <div className="min-w-0 flex-1 space-y-2">
+    <div className="w-full min-w-0 flex-1 space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Badge variant="secondary" className="text-[10px]">
           {ADD_BLOCK_LABELS[b.type]}
@@ -445,21 +596,21 @@ function MarketingComposeBlocks({
         <Input value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} placeholder="Heading" className="text-base font-semibold" />
       ) : null}
       {b.type === 'text' ? (
-        <Textarea value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} rows={4} resize="vertical" placeholder="Body text" />
+        <AutoGrowTextarea value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} rows={4} placeholder="Body text" />
       ) : null}
       {b.type === 'image' ? (
         <div className="space-y-2">
           <Input value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} placeholder="Image URL" />
           {b.content ? (
-            <div className="overflow-hidden rounded-md border border-border bg-background">
+            <div className="overflow-hidden rounded-md border border-border/40 bg-muted/25">
               <img src={b.content} alt="" className="max-h-40 w-full object-cover" />
             </div>
           ) : null}
         </div>
       ) : null}
       {b.type === 'button' ? (
-        <div className="flex flex-col items-center gap-2 py-1">
-          <Input value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} placeholder="Button label" className="max-w-md text-center" />
+        <div className="flex w-full flex-col items-center gap-2 py-1">
+          <Input value={b.content} onChange={(e) => updateContent(b.id, e.target.value)} placeholder="Button label" className="w-full text-center" />
           <span className="inline-flex rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground">{b.content || 'Button'}</span>
         </div>
       ) : null}
@@ -470,18 +621,16 @@ function MarketingComposeBlocks({
             const [L, R] = splitColumns(b.content)
             return (
               <>
-                <Textarea
+                <AutoGrowTextarea
                   value={L}
                   onChange={(e) => updateContent(b.id, joinColumns(e.target.value, R))}
                   rows={3}
-                  resize="vertical"
                   placeholder="Left column"
                 />
-                <Textarea
+                <AutoGrowTextarea
                   value={R}
                   onChange={(e) => updateContent(b.id, joinColumns(L, e.target.value))}
                   rows={3}
-                  resize="vertical"
                   placeholder="Right column"
                 />
               </>
@@ -493,26 +642,26 @@ function MarketingComposeBlocks({
   )
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <DropdownMenu>
-          <DropdownMenuTrigger className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-1 px-3 py-2 text-xs font-medium text-foreground hover:bg-secondary/40">
-            Add block
-            <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-          </DropdownMenuTrigger>
-          <DropdownMenuContent className="min-w-[12rem]">
-            {ALL_BLOCK_TYPES.map((t) => (
-              <DropdownMenuItem key={t} onClick={() => addBlock(t)}>
-                {ADD_BLOCK_LABELS[t]}
-              </DropdownMenuItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <span className="text-[10px] text-muted-foreground">Drag by the handle — blocks animate into place</span>
-      </div>
+    <div className="w-full min-w-0 space-y-3">
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          showChevron={false}
+          className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border/40 bg-white p-0 text-foreground shadow-sm hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/35 focus-visible:ring-offset-2 focus-visible:ring-offset-background data-[state=open]:border-citrus-orange/40 data-[state=open]:bg-white"
+          aria-label="Add block"
+        >
+          <Plus className="h-6 w-6 shrink-0" strokeWidth={2} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent className="min-h-0 min-w-[12rem] max-h-[min(70dvh,20rem)] overflow-y-auto">
+          {ALL_BLOCK_TYPES.map((t) => (
+            <DropdownMenuItem key={t} onClick={() => addBlock(t)}>
+              {ADD_BLOCK_LABELS[t]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
 
       {blocks.length === 0 ? (
-        <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-surface-1/60 text-center">
+        <div className="flex min-h-[220px] w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border/50 bg-muted/15 text-center">
           <p className="text-sm text-muted-foreground">No blocks yet</p>
           <p className="text-[10px] text-muted-foreground/80">Add blocks from the menu, or apply a template from the Templates tab.</p>
         </div>
@@ -520,28 +669,21 @@ function MarketingComposeBlocks({
         <DragDropContext onDragEnd={onDragEnd}>
           <Droppable droppableId="compose-blocks">
             {(dropProvided) => (
-              <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="space-y-2">
+              <div ref={dropProvided.innerRef} {...dropProvided.droppableProps} className="w-full space-y-2">
                 {blocks.map((b, index) => (
                   <Draggable key={b.id} draggableId={b.id} index={index}>
                     {(dragProvided, snapshot) => (
                       <article
                         ref={dragProvided.innerRef}
                         {...dragProvided.draggableProps}
+                        {...dragProvided.dragHandleProps}
                         style={dragProvided.draggableProps.style}
-                        className={`flex items-start gap-2 rounded-lg border bg-surface-1/50 px-3 transition-[box-shadow,padding,border-color,background-color] duration-200 ease-out ${
+                        className={`w-full min-w-0 cursor-grab touch-manipulation rounded-xl border border-border/45 bg-surface-1/55 px-3 py-3 shadow-sm outline-none transition-[box-shadow,background-color,border-color] duration-200 ease-out focus-visible:outline-none active:cursor-grabbing ${
                           snapshot.isDragging
-                            ? 'z-10 border-citrus-orange/45 bg-citrus-orange/[0.08] py-2 shadow-xl ring-2 ring-citrus-lemon/40'
-                            : 'border-border/60 py-3 hover:border-border'
+                            ? 'z-10 border-citrus-orange/35 bg-citrus-orange/[0.07] shadow-md'
+                            : 'hover:border-border/55 hover:bg-surface-1/75'
                         }`}
                       >
-                        <button
-                          type="button"
-                          {...dragProvided.dragHandleProps}
-                          className="mt-1 flex h-8 w-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md border border-transparent text-muted-foreground hover:border-border hover:bg-secondary/50 active:cursor-grabbing"
-                          aria-label="Drag to reorder"
-                        >
-                          <GripVertical className="h-4 w-4" />
-                        </button>
                         {renderBlockFields(b)}
                       </article>
                     )}
@@ -557,61 +699,27 @@ function MarketingComposeBlocks({
   )
 }
 
-function EmailClientPreview({
-  subject,
-  preheader,
-  fromName,
-  fromEmail,
-  blocks,
-  device,
-}: {
-  subject: string
-  preheader: string
-  fromName: string
-  fromEmail: string
-  blocks: EmailBlock[]
-  device: PreviewDevice
-}) {
+function EmailClientPreview({ blocks, device }: { blocks: EmailBlock[]; device: PreviewDevice }) {
   const frame =
     device === 'mobile'
-      ? 'w-full max-w-[360px] rounded-[1.35rem] border border-border bg-muted/25 p-2 shadow-sm'
+      ? 'w-full max-w-[320px]'
       : device === 'tablet'
-        ? 'w-full max-w-[520px] rounded-xl border border-border bg-muted/20 p-2.5 shadow-sm'
-        : 'w-full max-w-[600px]'
+        ? 'w-full max-w-[480px]'
+        : 'w-full max-w-[560px]'
 
-  const innerPad = device === 'mobile' ? 'px-3 py-3' : device === 'tablet' ? 'px-4 py-4' : 'px-6 py-6'
-  const metaClass = device === 'mobile' ? 'text-[10px]' : 'text-xs'
+  const innerPad = device === 'mobile' ? 'px-3 py-3' : device === 'tablet' ? 'px-4 py-4' : 'px-5 py-5'
 
   return (
-    <div className={`mx-auto transition-[max-width] duration-300 ease-out ${frame}`}>
-      <div className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
-        <div className="border-b border-border bg-muted/40 px-4 py-3">
-          <p className={`text-muted-foreground ${metaClass}`}>
-            <span className="font-medium text-foreground">{fromName || 'Sender'}</span>
-            {fromEmail ? <span className="text-muted-foreground"> · {fromEmail}</span> : null}
-          </p>
-          <p className={`mt-1 font-semibold text-foreground ${device === 'mobile' ? 'text-sm' : 'text-sm sm:text-base'}`}>
-            {subject || '(No subject)'}
-          </p>
-          {preheader ? <p className={`mt-0.5 line-clamp-2 text-muted-foreground ${metaClass}`}>{preheader}</p> : null}
-        </div>
-        <div className="bg-background px-3 py-4 sm:px-5 sm:py-5">
-          <div className={`mx-auto space-y-3 rounded-lg border border-border bg-surface-1 sm:space-y-4 ${innerPad}`}>
-            <StaticEmailBlocks blocks={blocks} device={device} keyPrefix="live-preview" />
-          </div>
+    <div className={`mx-auto w-full transition-[max-width] duration-300 ease-out ${frame}`}>
+      <div className="rounded-2xl bg-white p-1 sm:p-1.5">
+        <div
+          className={`space-y-3 rounded-xl bg-white sm:space-y-4 ${innerPad} min-h-[min(52vh,520px)] sm:min-h-[min(58vh,600px)]`}
+        >
+          <StaticEmailBlocks blocks={blocks} device={device} keyPrefix="live-preview" variant="live" />
         </div>
       </div>
     </div>
   )
-}
-
-function useDebouncedValue<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const id = setTimeout(() => setDebounced(value), delayMs)
-    return () => clearTimeout(id)
-  }, [value, delayMs])
-  return debounced
 }
 
 function useMinWidth(px: number) {
@@ -643,17 +751,20 @@ export default function MarketingPage() {
   const [trackOpens, setTrackOpens] = useState(true)
   const [trackClicks, setTrackClicks] = useState(true)
   const [plainTextFallback, setPlainTextFallback] = useState('')
-  const [recipientQuery, setRecipientQuery] = useState('')
-  const debouncedQuery = useDebouncedValue(recipientQuery, 200)
+  const [recipientSearchQuery, setRecipientSearchQuery] = useState('')
   const [customerTier, setCustomerTier] = useState('all')
   const [segmentFilter, setSegmentFilter] = useState<string[]>([])
-  const [tagFilter, setTagFilter] = useState('')
+  const [tagFilters, setTagFilters] = useState<string[]>([])
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<Set<string>>(() => new Set())
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop')
   const [templates, setTemplates] = useState<MarketingEmailTemplate[]>(loadTemplatesFromStorage)
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false)
   const [saveTemplateName, setSaveTemplateName] = useState('')
-  const templatesLoading = false
+  /** Set to true while fetching so each tab shows layout-matched skeletons. */
+  const [campaignsLoading] = useState(false)
+  const [templatesLoading] = useState(false)
+  const [contactsLoading] = useState(false)
+  const [composeLoading] = useState(false)
   const isLg = useMinWidth(1024)
   const { addToast } = useToast()
 
@@ -669,21 +780,28 @@ export default function MarketingPage() {
   }, [])
 
   const filteredRecipients = useMemo(() => {
-    const q = debouncedQuery.trim().toLowerCase()
+    const q = recipientSearchQuery.trim().toLowerCase()
     return MOCK_RECIPIENTS.filter((r) => {
       const matchesQuery =
         !q ||
         r.name.toLowerCase().includes(q) ||
         r.email.toLowerCase().includes(q) ||
         r.company.toLowerCase().includes(q) ||
-        r.tags.some((t) => t.toLowerCase().includes(q))
+        r.tags.some((t) => t.toLowerCase().includes(q)) ||
+        r.segments.some((s) => s.toLowerCase().includes(q))
       const matchesTier = customerTier === 'all' || r.customerType === customerTier
       const matchesSegments =
         segmentFilter.length === 0 || segmentFilter.some((seg) => r.segments.includes(seg))
-      const matchesTag = !tagFilter || r.tags.includes(tagFilter)
-      return matchesQuery && matchesTier && matchesSegments && matchesTag
+      const matchesTags =
+        tagFilters.length === 0 || tagFilters.some((tf) => r.tags.includes(tf))
+      return matchesQuery && matchesTier && matchesSegments && matchesTags
     })
-  }, [debouncedQuery, customerTier, segmentFilter, tagFilter])
+  }, [recipientSearchQuery, customerTier, segmentFilter, tagFilters])
+
+  const selectedRecipientsList = useMemo(
+    () => MOCK_RECIPIENTS.filter((r) => selectedRecipientIds.has(r.id)),
+    [selectedRecipientIds],
+  )
 
   const toggleRecipient = (id: string, checked: boolean) => {
     setSelectedRecipientIds((prev) => {
@@ -703,6 +821,21 @@ export default function MarketingPage() {
   }
 
   const clearSelection = () => setSelectedRecipientIds(new Set())
+
+  const toggleSegmentFilter = (id: string) => {
+    setSegmentFilter((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]))
+  }
+
+  const toggleTagFilterChip = (tag: string) => {
+    setTagFilters((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]))
+  }
+
+  const clearAudienceFilters = () => {
+    setCustomerTier('all')
+    setSegmentFilter([])
+    setTagFilters([])
+    setRecipientSearchQuery('')
+  }
 
   const handleUseTemplate = useCallback(
     (tpl: MarketingEmailTemplate) => {
@@ -804,129 +937,141 @@ export default function MarketingPage() {
 
   return (
     <div className="h-full flex flex-col">
-      <header className="px-4 py-4 sm:px-8 sm:py-5 border-b border-border flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-citrus-orange/10 flex items-center justify-center">
-            <Mail className="w-4 h-4 text-citrus-orange" />
+      <header className="flex shrink-0 flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 md:px-6 md:py-4 lg:px-8">
+        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent/10">
+            <Mail className="h-4 w-4 text-accent" aria-hidden />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">Marketing</h1>
-            <p className="text-xs text-muted-foreground mt-0.5">Campaigns, contacts, templates, and compose</p>
+          <div className="min-w-0">
+            <h1 className="truncate text-base font-semibold tracking-tight text-foreground sm:text-lg">Marketing</h1>
+            <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">Campaigns, contacts, and templates</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button
+        <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 sm:justify-end">
+          <div
+            className="flex items-center divide-x divide-border overflow-hidden rounded-lg border border-border"
+            role="tablist"
+            aria-label="Marketing sections"
+          >
+            {MAIN_TAB_ORDER.map((tab) => {
+              const TabIcon = MAIN_TAB_ICONS[tab]
+              const selected = activeTab === tab
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  role="tab"
+                  aria-selected={selected}
+                  aria-label={TAB_LABELS[tab]}
+                  title={TAB_LABELS[tab]}
+                  onClick={() => setActiveTab(tab)}
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                    selected
+                      ? 'bg-secondary text-foreground'
+                      : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
+                  }`}
+                >
+                  <TabIcon className="h-4 w-4 shrink-0" aria-hidden />
+                </button>
+              )
+            })}
+          </div>
+          <button
             type="button"
             onClick={() => setActiveTab('compose')}
-            className="h-10 w-10 shrink-0 rounded-lg p-0"
-            aria-label="New campaign"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-all duration-150 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95"
+            aria-label={TAB_LABELS.compose}
+            title={TAB_LABELS.compose}
           >
-            <Plus className="w-6 h-6" />
-          </Button>
+            <Plus className="h-4 w-4 shrink-0" aria-hidden />
+          </button>
         </div>
       </header>
-
-      <div className="px-4 py-3 sm:px-8 border-b border-border flex gap-1 overflow-x-auto hide-scrollbar">
-        {TAB_ORDER.map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-              activeTab === tab ? 'bg-secondary text-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-            }`}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </div>
 
       <div
         className={
           activeTab === 'contacts'
-            ? 'flex-1 flex flex-col min-h-0 overflow-hidden px-4 py-4 sm:px-8 sm:py-6'
+            ? 'flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-4 md:px-6 md:py-5 lg:px-8 lg:py-6'
             : activeTab === 'compose'
-              ? 'flex-1 flex min-h-0 overflow-hidden'
-              : 'flex-1 overflow-y-auto hide-scrollbar px-4 py-4 sm:px-8 sm:py-6'
+              ? 'flex min-h-0 flex-1 flex-col overflow-hidden'
+              : 'hide-scrollbar flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-5 lg:px-8 lg:py-6'
         }
       >
-        {activeTab === 'contacts' && <ContactsPage embedded />}
+        {activeTab === 'contacts' && <ContactsPage embedded loading={contactsLoading} />}
 
-        {activeTab === 'campaigns' && (
-          <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              {[
-                { label: 'Total Sent', value: '12.4K', sub: 'This month' },
-                { label: 'Avg. Open Rate', value: '64%', sub: '+8% vs prior' },
-                { label: 'Avg. Click Rate', value: '22%', sub: '+3% vs prior' },
-                { label: 'Active Automations', value: '7', sub: '3 paused' },
-              ].map((kpi) => (
-                <div key={kpi.label} className="glass rounded-xl p-4">
-                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
-                  <p className="text-2xl font-semibold text-foreground mt-1">{kpi.value}</p>
-                  <span className="text-[10px] text-citrus-lime">{kpi.sub}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="glass rounded-xl overflow-hidden">
-              <div className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 px-5 py-3 border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
-                <span>Campaign</span>
-                <span>Status</span>
-                <span className="flex items-center gap-1">
-                  <Eye className="w-3 h-3" /> Opens
-                </span>
-                <span className="flex items-center gap-1">
-                  <MousePointerClick className="w-3 h-3" /> Clicks
-                </span>
-                <span>Date</span>
-              </div>
-              {campaigns.map((c) => {
-                const st = statusConfig[c.status]
-                return (
-                  <div
-                    key={c.name}
-                    className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 px-5 py-3.5 border-b border-border/50 hover:bg-secondary/30 transition-colors items-center"
-                  >
-                    <div>
-                      <span className="text-sm font-medium text-foreground">{c.name}</span>
-                      <span className="text-[10px] text-muted-foreground ml-2">{c.recipients.toLocaleString()} recipients</span>
-                    </div>
-                    <span className={`text-xs flex items-center gap-1.5 ${st.color}`}>
-                      <st.icon className="w-3 h-3" />
-                      {st.label}
-                    </span>
-                    <span className="text-sm font-mono text-foreground">{c.openRate ? `${c.openRate}%` : '—'}</span>
-                    <span className="text-sm font-mono text-foreground">{c.clickRate ? `${c.clickRate}%` : '—'}</span>
-                    <span className="text-xs text-muted-foreground">{c.sentAt}</span>
+        {activeTab === 'campaigns' &&
+          (campaignsLoading ? (
+            <CampaignsTabSkeleton />
+          ) : (
+            <>
+              <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+                {[
+                  { label: 'Total Sent', value: '12.4K', sub: 'This month' },
+                  { label: 'Avg. Open Rate', value: '64%', sub: '+8% vs prior' },
+                  { label: 'Avg. Click Rate', value: '22%', sub: '+3% vs prior' },
+                  { label: 'Active Automations', value: '7', sub: '3 paused' },
+                ].map((kpi) => (
+                  <div key={kpi.label} className="glass rounded-xl p-4">
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{kpi.label}</span>
+                    <p className="mt-1 text-2xl font-semibold text-foreground">{kpi.value}</p>
+                    <span className="text-[10px] text-citrus-lime">{kpi.sub}</span>
                   </div>
-                )
-              })}
-            </div>
-          </>
-        )}
+                ))}
+              </div>
+
+              <div className="glass rounded-xl overflow-hidden">
+                <div className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 border-b border-border px-5 py-3 text-[10px] text-muted-foreground uppercase tracking-wider">
+                  <span>Campaign</span>
+                  <span>Status</span>
+                  <span className="flex items-center gap-1">
+                    <Eye className="h-3 w-3" /> Opens
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <MousePointerClick className="h-3 w-3" /> Clicks
+                  </span>
+                  <span>Date</span>
+                </div>
+                {campaigns.map((c) => {
+                  const st = statusConfig[c.status]
+                  return (
+                    <div
+                      key={c.name}
+                      className="grid grid-cols-[1fr_100px_80px_80px_100px] gap-4 border-b border-border/50 px-5 py-3.5 transition-colors hover:bg-secondary/30 items-center"
+                    >
+                      <div>
+                        <span className="text-sm font-medium text-foreground">{c.name}</span>
+                        <span className="ml-2 text-[10px] text-muted-foreground">{c.recipients.toLocaleString()} recipients</span>
+                      </div>
+                      <span className={`flex items-center gap-1.5 text-xs ${st.color}`}>
+                        <st.icon className="h-3 w-3" />
+                        {st.label}
+                      </span>
+                      <span className="font-mono text-sm text-foreground">{c.openRate ? `${c.openRate}%` : '—'}</span>
+                      <span className="font-mono text-sm text-foreground">{c.clickRate ? `${c.clickRate}%` : '—'}</span>
+                      <span className="text-xs text-muted-foreground">{c.sentAt}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          ))}
 
         {activeTab === 'templates' && (
-          <div className="space-y-4">
+          <div className="mx-auto w-full max-w-[88rem] space-y-6 px-4 py-3 md:px-6 md:py-4 lg:px-8">
             {templatesLoading ? (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-14 sm:grid-cols-2 sm:gap-16 lg:gap-20 xl:grid-cols-3 xl:gap-24">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="rounded-xl" style={{ height: TEMPLATE_CARD_PREVIEW_TOTAL_H + 140 }} />
+                  <MarketingTemplateCardSkeleton key={i} />
                 ))}
               </div>
             ) : (
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-14 sm:grid-cols-2 sm:gap-16 lg:gap-20 xl:grid-cols-3 xl:gap-24">
                 {templates.map((tpl) => (
-                  <Card key={tpl.id} className="flex flex-col overflow-hidden border-border/70 shadow-none">
-                    <div className="p-3 sm:p-4">
-                      <TemplateCardEmailPreview
-                        templateId={tpl.id}
-                        subject={tpl.subject}
-                        preheader={tpl.preheader}
-                        blocks={tpl.blocks}
-                      />
+                  <Card key={tpl.id} className="flex flex-col overflow-hidden border border-border/35 bg-white shadow-sm">
+                    <div className="p-2 sm:p-3">
+                      <TemplateCardEmailPreview templateId={tpl.id} blocks={tpl.blocks} />
                     </div>
-                    <CardContent className="flex flex-1 flex-col space-y-3 p-4 pt-0 sm:p-5 sm:pt-0">
+                    <CardContent className="flex flex-1 flex-col space-y-2 p-3 pt-0 sm:p-4 sm:pt-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="secondary" className="text-[10px]">
                           {tpl.category}
@@ -958,24 +1103,29 @@ export default function MarketingPage() {
           </div>
         )}
 
-        {activeTab === 'compose' && (
+        {activeTab === 'compose' && composeLoading ? (
+          <ComposeTabSkeleton isLg={isLg} />
+        ) : null}
+
+        {activeTab === 'compose' && !composeLoading && (
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex-1 min-h-0">
+            <div className="min-h-0 flex-1">
               <Resizable
                 direction={isLg ? 'horizontal' : 'vertical'}
                 defaultPrimarySize={isLg ? 58 : 54}
                 minPrimarySize={isLg ? 38 : 32}
                 minSecondarySize={isLg ? 30 : 28}
+                className="!border-0 bg-transparent shadow-none ring-0 [&>div:first-child]:border-0 [&>div:first-child]:shadow-none [&>div:first-child]:ring-0"
                 primary={
                   <ScrollArea
-                    className={`h-full max-h-[calc(100vh-8rem)] ${isLg ? 'pr-3' : 'pb-2'}`}
-                    maxHeight="calc(100vh - 8rem)"
+                    className={`h-full max-h-[calc(100vh-5.5rem)] border-0 bg-transparent shadow-none ring-0 outline-none ${isLg ? 'pr-3' : 'pb-2'}`}
+                    maxHeight="calc(100vh - 5.5rem)"
                   >
-                    <div className="space-y-4 px-4 py-4 pb-8 sm:px-8 sm:py-5 sm:pb-10">
+                    <div className={COMPOSE_FORM_INNER}>
                       <Collapsible
                         title="Sender & subject"
                         defaultOpen
-                        className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-3"
+                        className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5"
                       >
                         <div className="mt-3 grid gap-4 md:grid-cols-2">
                           <div className="space-y-2 md:col-span-2">
@@ -1005,7 +1155,7 @@ export default function MarketingPage() {
                         </div>
                       </Collapsible>
 
-                      <Collapsible title="Reply routing" defaultOpen={false} className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-3">
+                      <Collapsible title="Reply routing" defaultOpen={false} className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5">
                         <div className="mt-3 grid gap-4 md:grid-cols-2">
                           <div className="space-y-2">
                             <Label className="text-[10px] text-muted-foreground">Reply-to</Label>
@@ -1018,14 +1168,14 @@ export default function MarketingPage() {
                         </div>
                       </Collapsible>
 
-                      <Collapsible title="Tracking & UTM" defaultOpen={false} className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-3">
+                      <Collapsible title="Tracking & UTM" defaultOpen={false} className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5">
                         <div className="mt-3 space-y-4">
-                          <div className="grid gap-3 md:grid-cols-2">
-                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/40 px-3 py-2.5">
+                          <div className="grid gap-2 sm:grid-cols-2 sm:gap-3">
+                            <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/25 px-3 py-2.5">
                               <Label className="text-xs text-foreground">Track opens</Label>
                               <Switch checked={trackOpens} onCheckedChange={setTrackOpens} />
                             </div>
-                            <div className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/40 px-3 py-2.5">
+                            <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/25 px-3 py-2.5">
                               <Label className="text-xs text-foreground">Track clicks</Label>
                               <Switch checked={trackClicks} onCheckedChange={setTrackClicks} />
                             </div>
@@ -1048,20 +1198,19 @@ export default function MarketingPage() {
                         </div>
                       </Collapsible>
 
-                      <div className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-4">
+                      <div className="w-full rounded-xl bg-surface-1/35 px-4 py-4 sm:px-5">
                         <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Email body</p>
-                        <div className="mt-3">
+                        <div className="mt-3 w-full min-w-0">
                           <MarketingComposeBlocks blocks={blocks} onBlocksChange={setBlocks} />
                         </div>
                       </div>
 
-                      <Collapsible title="Plain text fallback" defaultOpen={false} className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-3">
+                      <Collapsible title="Plain text fallback" defaultOpen={false} className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5">
                         <div className="mt-3">
-                          <Textarea
+                          <AutoGrowTextarea
                             value={plainTextFallback}
                             onChange={(e) => setPlainTextFallback(e.target.value)}
                             rows={4}
-                            resize="vertical"
                             placeholder="Optional. Shown in clients without HTML support."
                           />
                         </div>
@@ -1077,62 +1226,71 @@ export default function MarketingPage() {
                           </span>
                         }
                         defaultOpen={false}
-                        className="rounded-xl border border-border/60 bg-surface-1/25 px-4 py-3"
+                        className="rounded-xl bg-surface-1/35 px-4 py-3 sm:px-5"
                       >
-                        <div className="mt-3 space-y-3">
-                          <SearchBar
-                            value={recipientQuery}
-                            onChange={(e) => setRecipientQuery(e.target.value)}
-                            placeholder="Search name, email, company, or tag…"
-                          />
+                        <div className="mt-4 space-y-4">
+                          <div className="rounded-xl border border-border/40 bg-white px-3 py-3 shadow-sm sm:px-4 sm:py-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border/35 pb-3">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-citrus-orange/10 text-citrus-orange">
+                                  <Users className="h-4 w-4" />
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-foreground">Choose recipients</p>
+                                  <p className="text-[11px] text-muted-foreground">
+                                    {filteredRecipients.length} match filters · {selectedRecipientIds.size} selected
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={clearAudienceFilters}
+                                className="shrink-0 rounded-full border border-border/40 bg-muted/30 px-3 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:border-border/55 hover:bg-muted/50 hover:text-foreground"
+                              >
+                                Reset filters
+                              </button>
+                            </div>
 
-                          <Collapsible title="Audience filters" defaultOpen={false} className="rounded-lg border border-border/50 bg-background/30 px-3 py-2">
-                            <div className="mt-3 space-y-3">
-                              <div className="space-y-2">
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Customer tier</p>
-                                <ToggleGroup
-                                  type="single"
-                                  items={CUSTOMER_TOGGLE_ITEMS}
-                                  value={customerTier}
-                                  onValueChange={(v) => {
-                                    if (typeof v === 'string' && v) setCustomerTier(v)
-                                    else setCustomerTier('all')
-                                  }}
-                                  className="flex flex-wrap gap-1"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Engagement segments</p>
-                                <ToggleGroup
-                                  type="multiple"
-                                  items={SEGMENT_TOGGLE_ITEMS}
-                                  value={segmentFilter}
-                                  onValueChange={(v) => {
-                                    if (Array.isArray(v)) setSegmentFilter(v)
-                                  }}
-                                  className="flex flex-wrap gap-1"
-                                />
-                              </div>
-                              <div className="space-y-2">
-                                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tag</p>
+                            <div className="mt-4 space-y-3">
+                              <div>
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tier</p>
                                 <div className="flex flex-wrap gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => setTagFilter('')}
-                                    className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                                      !tagFilter ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                                    }`}
-                                  >
-                                    All tags
-                                  </button>
+                                  {CUSTOMER_TOGGLE_ITEMS.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => setCustomerTier(item.id)}
+                                      className={recipientFilterPillClasses(customerTier === item.id)}
+                                    >
+                                      {item.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Segments</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {SEGMENT_TOGGLE_ITEMS.map((item) => (
+                                    <button
+                                      key={item.id}
+                                      type="button"
+                                      onClick={() => toggleSegmentFilter(item.id)}
+                                      className={recipientFilterPillClasses(segmentFilter.includes(item.id))}
+                                    >
+                                      {item.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              <div>
+                                <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Tags</p>
+                                <div className="flex max-h-[5.5rem] flex-wrap gap-1.5 overflow-y-auto pr-0.5">
                                   {allTagOptions.map((t) => (
                                     <button
                                       key={t}
                                       type="button"
-                                      onClick={() => setTagFilter(t)}
-                                      className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                                        tagFilter === t ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
-                                      }`}
+                                      onClick={() => toggleTagFilterChip(t)}
+                                      className={recipientFilterPillClasses(tagFilters.includes(t))}
                                     >
                                       {t}
                                     </button>
@@ -1140,49 +1298,140 @@ export default function MarketingPage() {
                                 </div>
                               </div>
                             </div>
-                          </Collapsible>
-
-                          <div className="flex flex-wrap gap-2">
-                            <Button type="button" variant="secondary" className="h-8 text-xs" onClick={selectAllFiltered}>
-                              Select all in view
-                            </Button>
-                            <Button type="button" variant="secondary" className="h-8 text-xs" onClick={clearSelection}>
-                              Clear selection
-                            </Button>
                           </div>
 
-                          <ScrollArea className="max-h-52 rounded-lg border border-border" maxHeight="13rem">
-                            <div className="divide-y divide-border/60">
-                              {filteredRecipients.length === 0 ? (
-                                <p className="px-4 py-3 text-xs text-muted-foreground">No contacts match your filters.</p>
-                              ) : (
-                                filteredRecipients.map((r) => (
-                                  <label
-                                    key={r.id}
-                                    className="flex cursor-pointer items-start gap-3 px-4 py-2.5 hover:bg-secondary/20"
-                                  >
-                                    <Checkbox
-                                      checked={selectedRecipientIds.has(r.id)}
-                                      onCheckedChange={(c) => toggleRecipient(r.id, c === true)}
-                                      className="mt-0.5"
-                                    />
-                                    <span className="min-w-0 flex-1">
-                                      <span className="block text-sm font-medium text-foreground">{r.name}</span>
-                                      <span className="block text-[11px] text-muted-foreground">{r.email}</span>
-                                      <span className="mt-0.5 block text-[10px] text-muted-foreground">{r.company}</span>
-                                    </span>
-                                    <span className="hidden shrink-0 flex-wrap justify-end gap-1 sm:flex">
-                                      {r.tags.map((t) => (
-                                        <Badge key={t} variant="outline" className="text-[9px]">
-                                          {t}
-                                        </Badge>
-                                      ))}
-                                    </span>
-                                  </label>
-                                ))
-                              )}
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="text-xs font-medium text-foreground">Contacts</span>
+                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                              <button
+                                type="button"
+                                className="font-medium text-citrus-orange hover:underline"
+                                onClick={selectAllFiltered}
+                              >
+                                Select all shown
+                              </button>
+                              <span className="text-border" aria-hidden>
+                                ·
+                              </span>
+                              <button type="button" className="text-muted-foreground hover:text-foreground" onClick={clearSelection}>
+                                Clear selection
+                              </button>
                             </div>
-                          </ScrollArea>
+                          </div>
+
+                          <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 z-[1] h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                            <Input
+                              value={recipientSearchQuery}
+                              onChange={(e) => setRecipientSearchQuery(e.target.value)}
+                              placeholder="Filter this list as you type…"
+                              className="rounded-xl border-border/40 bg-white pl-10 shadow-sm"
+                              aria-label="Search contacts"
+                            />
+                          </div>
+
+                          <div className="overflow-hidden rounded-xl border border-border/40 bg-muted/15">
+                            <ScrollArea className="max-h-[min(40vh,18rem)]" maxHeight="min(40vh, 18rem)">
+                              {filteredRecipients.length === 0 ? (
+                                <p className="px-4 py-10 text-center text-xs text-muted-foreground">
+                                  {recipientSearchQuery.trim()
+                                    ? `No contacts match “${recipientSearchQuery.trim()}” with the current filters.`
+                                    : 'No contacts match these filters. Adjust tier, segments, or tags.'}
+                                </p>
+                              ) : (
+                                <ul className="space-y-2 p-2 sm:p-3">
+                                  {filteredRecipients.map((r) => {
+                                    const isSelected = selectedRecipientIds.has(r.id)
+                                    return (
+                                      <li key={r.id}>
+                                        <label
+                                          className={`flex cursor-pointer gap-3 rounded-xl border px-3 py-3 transition-[border-color,box-shadow,background-color] sm:gap-3.5 sm:px-4 ${
+                                            isSelected
+                                              ? 'border-citrus-orange/40 bg-white shadow-sm ring-1 ring-citrus-orange/15'
+                                              : 'border-border/35 bg-white/90 hover:border-border/55 hover:bg-white'
+                                          }`}
+                                        >
+                                          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-citrus-orange/20 to-citrus-orange/5 text-[12px] font-bold tracking-tight text-citrus-orange">
+                                            {recipientInitials(r.name)}
+                                          </span>
+                                          <div className="min-w-0 flex-1 space-y-1.5">
+                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                              <span className="text-sm font-semibold leading-tight text-foreground">{r.name}</span>
+                                              <Badge variant="outline" className="h-5 border-border/50 px-1.5 text-[9px] font-normal text-muted-foreground">
+                                                {recipientTierLabel(r.customerType)}
+                                              </Badge>
+                                            </div>
+                                            <p className="truncate text-[11px] leading-snug text-muted-foreground">{r.email}</p>
+                                            <p className="truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground/80">
+                                              {r.company}
+                                            </p>
+                                            <div className="flex flex-wrap gap-1 pt-0.5">
+                                              {r.segments.map((seg) => (
+                                                <span
+                                                  key={seg}
+                                                  className="inline-flex rounded-md border border-border/40 bg-muted/40 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground"
+                                                >
+                                                  {segmentDisplayLabel(seg)}
+                                                </span>
+                                              ))}
+                                              {r.tags.map((tag) => (
+                                                <span
+                                                  key={tag}
+                                                  className="inline-flex rounded-md bg-citrus-orange/10 px-1.5 py-0.5 text-[9px] font-medium text-citrus-orange"
+                                                >
+                                                  {tag}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          </div>
+                                          <Checkbox
+                                            checked={isSelected}
+                                            onCheckedChange={(c) => toggleRecipient(r.id, c === true)}
+                                            className="mt-0.5 shrink-0 self-start"
+                                          />
+                                        </label>
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              )}
+                            </ScrollArea>
+                          </div>
+
+                          {selectedRecipientsList.length > 0 ? (
+                            <div className="rounded-xl border border-border/40 bg-muted/20 px-3 py-3 sm:px-4">
+                              <div className="mb-2 flex items-center justify-between gap-2">
+                                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Will receive</p>
+                                <span className="text-[10px] text-muted-foreground">{selectedRecipientsList.length} people</span>
+                              </div>
+                              <div className="flex flex-wrap gap-2">
+                                {selectedRecipientsList.map((r) => (
+                                  <span
+                                    key={r.id}
+                                    className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-border/35 bg-white px-2.5 py-1 text-[10px] text-foreground shadow-sm"
+                                    title={`${r.name} · ${r.email}`}
+                                  >
+                                    <span className="truncate font-medium">{r.name}</span>
+                                    <button
+                                      type="button"
+                                      className="shrink-0 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                                      aria-label={`Remove ${r.name}`}
+                                      onClick={() => toggleRecipient(r.id, false)}
+                                    >
+                                      <span className="sr-only">Remove</span>
+                                      <span className="text-xs leading-none" aria-hidden>
+                                        ×
+                                      </span>
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              Tick contacts in the list above to add them to this send.
+                            </p>
+                          )}
                         </div>
                       </Collapsible>
 
@@ -1194,53 +1443,46 @@ export default function MarketingPage() {
                 }
                 secondary={
                   <ScrollArea
-                    className={`h-full ${isLg ? 'pl-2 pr-1' : 'px-2'}`}
-                    maxHeight="calc(100vh - 8rem)"
+                    className={`h-full max-h-[calc(100vh-5.5rem)] border-0 bg-transparent shadow-none ring-0 outline-none ${isLg ? 'pl-3 pr-2' : 'px-3'}`}
+                    maxHeight="calc(100vh - 5.5rem)"
                   >
-                    <div className={`space-y-3 ${isLg ? 'sticky top-0 py-4 pr-2 sm:py-6' : 'py-4'}`}>
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Live preview</p>
-                        <div className="flex w-fit max-w-full gap-2 rounded-lg border border-border bg-surface-1 p-1.5 shadow-sm">
-                          <Button
-                            type="button"
-                            variant={previewDevice === 'desktop' ? 'primary' : 'secondary'}
-                            className="h-10 w-10 shrink-0 p-0"
-                            onClick={() => setPreviewDevice('desktop')}
-                            aria-label="Desktop preview"
-                            aria-pressed={previewDevice === 'desktop'}
+                    <div className={`mx-auto flex w-full max-w-2xl flex-col ${isLg ? 'sticky top-0 py-4' : 'py-4'}`}>
+                      <div className="px-1 pb-4 pt-1 sm:px-2">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <p className="text-[10px] font-extrabold uppercase tracking-wider text-foreground">Live Preview</p>
+                          <div
+                            role="group"
+                            aria-label="Preview width"
+                            className="flex w-fit shrink-0 rounded-full border border-border/30 bg-muted/25 p-0.5 shadow-inner"
                           >
-                            <Monitor className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={previewDevice === 'tablet' ? 'primary' : 'secondary'}
-                            className="h-10 w-10 shrink-0 p-0"
-                            onClick={() => setPreviewDevice('tablet')}
-                            aria-label="Tablet preview"
-                            aria-pressed={previewDevice === 'tablet'}
-                          >
-                            <Tablet className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            type="button"
-                            variant={previewDevice === 'mobile' ? 'primary' : 'secondary'}
-                            className="h-10 w-10 shrink-0 p-0"
-                            onClick={() => setPreviewDevice('mobile')}
-                            aria-label="Mobile preview"
-                            aria-pressed={previewDevice === 'mobile'}
-                          >
-                            <Smartphone className="h-4 w-4" />
-                          </Button>
+                            {(
+                              [
+                                { id: 'desktop' as const, Icon: Monitor, label: 'Desktop' },
+                                { id: 'tablet' as const, Icon: Tablet, label: 'Tablet' },
+                                { id: 'mobile' as const, Icon: Smartphone, label: 'Mobile' },
+                              ] as const
+                            ).map(({ id, Icon, label }) => (
+                              <button
+                                key={id}
+                                type="button"
+                                aria-label={`${label} preview`}
+                                aria-pressed={previewDevice === id}
+                                onClick={() => setPreviewDevice(id)}
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                                  previewDevice === id
+                                    ? 'bg-secondary text-foreground shadow-sm'
+                                    : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
+                                }`}
+                              >
+                                <Icon className="h-4 w-4 shrink-0" strokeWidth={2} />
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       </div>
-                      <EmailClientPreview
-                        subject={subject}
-                        preheader={preheader}
-                        fromName={fromName}
-                        fromEmail={fromEmail}
-                        blocks={blocks}
-                        device={previewDevice}
-                      />
+                      <div className="min-h-[min(60vh,580px)] px-2 py-8 sm:min-h-[min(65vh,640px)] sm:px-4 sm:py-10">
+                        <EmailClientPreview blocks={blocks} device={previewDevice} />
+                      </div>
                     </div>
                   </ScrollArea>
                 }

@@ -9,18 +9,18 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  Textarea,
-  Switch,
   Card,
   CardContent,
   CardHeader,
   CardTitle,
-  Badge,
+  Checkbox,
+  Skeleton,
 } from '@citron-systems/citron-ui'
 import * as Popover from '@radix-ui/react-popover'
-import { Search, Filter, Plus, Building2, Star } from 'lucide-react'
+import { Search, Filter, Plus, Building2, Star, Pencil, X } from 'lucide-react'
 import { useState, useMemo } from 'react'
 import { useToast } from '@/lib/ToastContext'
+import { AutoGrowTextarea } from '@/lib/AutoGrowTextarea'
 import {
   isValidEmail,
   isValidPersonName,
@@ -188,11 +188,19 @@ const tagColors: Record<string, string> = {
 }
 
 const allTags = ['Champion', 'Decision Maker', 'Technical Buyer', 'At Risk', 'Executive Sponsor', 'Budget Holder', 'End User']
-const allCompanies = [...new Set(initialContacts.map((c) => c.company))].sort()
 
-type ContactsPageProps = { embedded?: boolean }
+type ContactsPageProps = { embedded?: boolean; loading?: boolean }
 
 type FieldErrors = Partial<Record<'name' | 'email' | 'phone' | 'linkedin', string>>
+
+function ReadField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className="mt-1 text-sm text-foreground">{value.trim() ? value : '—'}</p>
+    </div>
+  )
+}
 
 const emptyNewContact = () => ({
   name: '',
@@ -237,30 +245,26 @@ function validateContactFields(input: {
   return errors
 }
 
-export default function ContactsPage({ embedded = false }: ContactsPageProps) {
+export default function ContactsPage({ embedded = false, loading = false }: ContactsPageProps) {
   const hPad = embedded ? 'px-0' : 'px-8'
   const [contacts, setContacts] = useState<Contact[]>(initialContacts)
   const [search, setSearch] = useState('')
   const [addOpen, setAddOpen] = useState(false)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [filterTag, setFilterTag] = useState<string>('')
-  const [filterCompanyQuery, setFilterCompanyQuery] = useState('')
-  const [filterRoleQuery, setFilterRoleQuery] = useState('')
+  const [filterTags, setFilterTags] = useState<Set<string>>(() => new Set())
+  const [filterCompany, setFilterCompany] = useState('')
+  const [filterRole, setFilterRole] = useState('')
   const [starredOnly, setStarredOnly] = useState(false)
   const [newContact, setNewContact] = useState(emptyNewContact)
   const [addErrors, setAddErrors] = useState<FieldErrors>({})
   const [detailOpen, setDetailOpen] = useState(false)
+  const [detailEditing, setDetailEditing] = useState(false)
   const [draft, setDraft] = useState<Contact | null>(null)
   const [draftErrors, setDraftErrors] = useState<FieldErrors>({})
   const { addToast } = useToast()
 
-  const openAdd = () => {
-    setNewContact(emptyNewContact())
-    setAddErrors({})
-    setAddOpen(true)
-  }
-
   const openDetail = (c: Contact) => {
+    setDetailEditing(false)
     setDraft({
       ...c,
       phone: normalizePhoneDigits(c.phone),
@@ -275,6 +279,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
     if (!open) {
       setDraft(null)
       setDraftErrors({})
+      setDetailEditing(false)
     }
   }
 
@@ -305,15 +310,45 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
       ),
     )
     addToast({ title: 'Contact updated', variant: 'success' })
+    setDetailEditing(false)
     setDetailOpen(false)
     setDraft(null)
     setDraftErrors({})
   }
 
-  const companySuggestions = useMemo(() => {
-    const q = filterCompanyQuery.trim().toLowerCase()
-    return allCompanies.filter((c) => !q || c.toLowerCase().includes(q))
-  }, [filterCompanyQuery])
+  const cancelDetailEdit = () => {
+    const id = draft?.id
+    if (!id) return
+    const orig = contacts.find((c) => c.id === id)
+    if (orig) {
+      setDraft({
+        ...orig,
+        phone: normalizePhoneDigits(orig.phone),
+        name: stripDigitsFromName(orig.name),
+      })
+    }
+    setDraftErrors({})
+    setDetailEditing(false)
+  }
+
+  const allCompanies = useMemo(
+    () => [...new Set(contacts.map((c) => c.company))].sort((a, b) => a.localeCompare(b)),
+    [contacts],
+  )
+
+  const allRoles = useMemo(
+    () => [...new Set(contacts.map((c) => c.role))].sort((a, b) => a.localeCompare(b)),
+    [contacts],
+  )
+
+  const toggleFilterTag = (tag: string) => {
+    setFilterTags((prev) => {
+      const next = new Set(prev)
+      if (next.has(tag)) next.delete(tag)
+      else next.add(tag)
+      return next
+    })
+  }
 
   const filtered = contacts.filter((c) => {
     const matchesSearch =
@@ -323,13 +358,11 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
       c.email.toLowerCase().includes(search.toLowerCase()) ||
       c.role.toLowerCase().includes(search.toLowerCase()) ||
       normalizePhoneDigits(c.phone).includes(normalizePhoneDigits(search))
-    const matchesTag = !filterTag || c.tags.includes(filterTag)
-    const matchesCompany =
-      !filterCompanyQuery.trim() || c.company.toLowerCase().includes(filterCompanyQuery.trim().toLowerCase())
-    const matchesRole =
-      !filterRoleQuery.trim() || c.role.toLowerCase().includes(filterRoleQuery.trim().toLowerCase())
+    const matchesTags = filterTags.size === 0 || c.tags.some((t) => filterTags.has(t))
+    const matchesCompany = !filterCompany || c.company === filterCompany
+    const matchesRole = !filterRole || c.role === filterRole
     const matchesStarred = !starredOnly || c.starred
-    return matchesSearch && matchesTag && matchesCompany && matchesRole && matchesStarred
+    return matchesSearch && matchesTags && matchesCompany && matchesRole && matchesStarred
   })
 
   const toggleStar = (id: string) => {
@@ -371,106 +404,399 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
   }
 
   const clearFilters = () => {
-    setFilterTag('')
-    setFilterCompanyQuery('')
-    setFilterRoleQuery('')
+    setFilterTags(new Set())
+    setFilterCompany('')
+    setFilterRole('')
     setStarredOnly(false)
   }
 
   const filtersPanelClass =
-    'mt-2 w-[min(100vw-1.5rem,22rem)] p-6 sm:p-7 glass rounded-xl border border-border shadow-lg z-[100] max-h-[min(85vh,560px)] overflow-y-auto'
+    'mt-2 w-[min(100vw-1.5rem,20rem)] p-4 sm:p-5 z-[100] max-h-[min(85vh,520px)] overflow-y-auto rounded-xl border border-border bg-background shadow-lg'
 
-  const hasActiveFilters = !!(filterTag || filterCompanyQuery.trim() || filterRoleQuery.trim() || starredOnly)
+  const addContactPanelClass =
+    'mt-2 z-[100] flex w-[min(100vw-1.25rem,24rem)] max-h-[min(88vh,640px)] flex-col overflow-hidden rounded-xl border border-border bg-background p-0 shadow-lg outline-none'
+
+  const hasActiveFilters = filterTags.size > 0 || !!filterCompany || !!filterRole || starredOnly
+
 
   const dialogShellClass =
-    'flex max-h-[min(92dvh,760px)] w-[calc(100vw-1.25rem)] max-w-xl flex-col gap-0 overflow-hidden border-border p-0 sm:max-w-xl'
+    'relative flex max-h-[min(92dvh,760px)] w-[calc(100vw-1.25rem)] max-w-xl flex-col gap-0 overflow-hidden border-border p-0 sm:max-w-xl'
 
   const dialogBodyClass = 'min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8'
 
   const dialogFooterClass = 'shrink-0 border-t border-border bg-surface-1/90 px-6 py-4 sm:px-8 backdrop-blur-sm'
 
+  if (loading) {
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <div className={`flex flex-wrap items-center gap-2 border-b border-border py-3 ${hPad}`}>
+          <Skeleton className="h-10 w-full max-w-[14rem] rounded-lg sm:max-w-[16rem]" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        </div>
+        <div className={`min-h-0 flex-1 overflow-y-auto hide-scrollbar py-6 ${hPad}`}>
+          <div className="glass overflow-hidden rounded-xl">
+            <div className="grid grid-cols-[40px_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-3 border-b border-border px-5 py-3">
+              <span />
+              <Skeleton className="h-3 w-10 rounded" />
+              <Skeleton className="h-3 w-12 rounded" />
+              <Skeleton className="h-3 w-16 rounded" />
+              <Skeleton className="h-3 w-10 rounded" />
+              <Skeleton className="h-3 w-10 rounded" />
+            </div>
+            {Array.from({ length: 8 }).map((_, ri) => (
+              <div
+                key={ri}
+                className="grid grid-cols-[40px_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-3 border-b border-border/50 px-5 py-3 items-center"
+              >
+                <Skeleton className="mx-auto h-4 w-4 rounded" />
+                <Skeleton className="h-4 w-full max-w-[9rem] rounded-md" />
+                <Skeleton className="h-4 w-full rounded-md" />
+                <Skeleton className="h-4 w-full max-w-[7rem] rounded-md" />
+                <Skeleton className="h-4 w-full max-w-[6rem] rounded-md" />
+                <div className="flex flex-wrap gap-1">
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className={`${hPad} py-3 border-b border-border flex flex-wrap items-center gap-3`}>
-        <div className="relative flex-1 min-w-[min(100%,12rem)] max-w-xl">
+      <div className={`${hPad} py-3 border-b border-border flex flex-wrap items-center gap-2`}>
+        <div className="relative w-full max-w-[14rem] sm:max-w-[16rem]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-surface-1 border border-border rounded-lg pl-9 pr-4 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="w-full bg-surface-1 border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
             placeholder="Search contacts..."
           />
         </div>
-        <Button type="button" onClick={openAdd} className="h-10 w-10 shrink-0 rounded-lg p-0" aria-label="Add contact">
-          <Plus className="h-6 w-6" />
-        </Button>
+        <Popover.Root
+          open={addOpen}
+          onOpenChange={(open) => {
+            setAddOpen(open)
+            if (open) {
+              setNewContact(emptyNewContact())
+              setAddErrors({})
+            }
+          }}
+        >
+          <Popover.Trigger asChild>
+            <Button type="button" className="h-10 w-10 shrink-0 rounded-lg p-0" aria-label="Add contact">
+              <Plus className="h-6 w-6" />
+            </Button>
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
+              side="bottom"
+              align="start"
+              sideOffset={10}
+              collisionPadding={16}
+              className={addContactPanelClass}
+            >
+              <div className="flex min-h-0 max-h-[min(88vh,640px)] flex-col">
+                <div className="flex shrink-0 items-start justify-between gap-2 border-b border-border px-4 py-3 sm:px-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Add contact</p>
+                    <p className="text-xs text-muted-foreground">Required fields are validated. Phone accepts digits only.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAddOpen(false)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    aria-label="Close"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+                  <div className="space-y-5">
+                    <Card className="border-0 bg-muted/20 shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-medium text-muted-foreground">Profile</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px]">Name</Label>
+                          <Input
+                            value={newContact.name}
+                            error={!!addErrors.name}
+                            onChange={(e) => {
+                              setAddErrors((p) => ({ ...p, name: undefined }))
+                              setNewContact((p) => ({ ...p, name: stripDigitsFromName(e.target.value) }))
+                            }}
+                            placeholder="Full name"
+                          />
+                          {addErrors.name ? <p className="text-[10px] text-destructive">{addErrors.name}</p> : null}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px]">Email</Label>
+                          <Input
+                            type="email"
+                            value={newContact.email}
+                            error={!!addErrors.email}
+                            onChange={(e) => {
+                              setAddErrors((p) => ({ ...p, email: undefined }))
+                              setNewContact((p) => ({ ...p, email: e.target.value }))
+                            }}
+                            placeholder="name@company.com"
+                          />
+                          {addErrors.email ? <p className="text-[10px] text-destructive">{addErrors.email}</p> : null}
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px]">Phone (digits)</Label>
+                            <Input
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={newContact.phone}
+                              error={!!addErrors.phone}
+                              onChange={(e) => {
+                                setAddErrors((p) => ({ ...p, phone: undefined }))
+                                setNewContact((p) => ({ ...p, phone: normalizePhoneDigits(e.target.value) }))
+                              }}
+                              placeholder="14155550100"
+                            />
+                            {addErrors.phone ? <p className="text-[10px] text-destructive">{addErrors.phone}</p> : null}
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px]">Time zone</Label>
+                            <AdvancedDropdown
+                              options={TIMEZONE_OPTIONS}
+                              value={newContact.timezone}
+                              onChange={(v) => setNewContact((p) => ({ ...p, timezone: v ?? 'UTC' }))}
+                              placeholder="Select time zone"
+                              searchPlaceholder="Search time zones…"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-0 bg-muted/20 shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-medium text-muted-foreground">Organization</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px]">Company</Label>
+                          <Input
+                            value={newContact.company}
+                            onChange={(e) => setNewContact((p) => ({ ...p, company: e.target.value }))}
+                            placeholder="Company name"
+                          />
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px]">Role</Label>
+                            <Input
+                              value={newContact.role}
+                              onChange={(e) => setNewContact((p) => ({ ...p, role: e.target.value }))}
+                              placeholder="Job title"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px]">Country / region</Label>
+                            <Input
+                              value={newContact.country}
+                              onChange={(e) => setNewContact((p) => ({ ...p, country: e.target.value }))}
+                              placeholder="Country"
+                            />
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-0 bg-muted/20 shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-medium text-muted-foreground">Links & notes</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3 pt-0">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px]">LinkedIn URL</Label>
+                          <Input
+                            value={newContact.linkedInUrl}
+                            error={!!addErrors.linkedin}
+                            onChange={(e) => {
+                              setAddErrors((p) => ({ ...p, linkedin: undefined }))
+                              setNewContact((p) => ({ ...p, linkedInUrl: e.target.value }))
+                            }}
+                            placeholder="https://linkedin.com/in/…"
+                          />
+                          {addErrors.linkedin ? <p className="text-[10px] text-destructive">{addErrors.linkedin}</p> : null}
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px]">Notes</Label>
+                          <AutoGrowTextarea
+                            value={newContact.notes}
+                            onChange={(e) => setNewContact((p) => ({ ...p, notes: e.target.value }))}
+                            rows={3}
+                            placeholder="Context, preferences, or next steps"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    <Card className="border-0 bg-muted/20 shadow-none">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-xs font-medium text-muted-foreground">Tags</CardTitle>
+                      </CardHeader>
+                      <CardContent className="pt-0">
+                        <div className="flex flex-wrap gap-1.5">
+                          {allTags.map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              onClick={() =>
+                                setNewContact((p) => ({
+                                  ...p,
+                                  tags: p.tags.includes(tag) ? p.tags.filter((t) => t !== tag) : [...p.tags, tag],
+                                }))
+                              }
+                              className={`rounded-full px-2 py-1 text-[10px] transition-colors ${
+                                newContact.tags.includes(tag)
+                                  ? tagColors[tag] || 'bg-secondary text-secondary-foreground'
+                                  : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'
+                              }`}
+                            >
+                              {tag}
+                            </button>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+                <div className="flex shrink-0 flex-col gap-2 border-t border-border bg-surface-1/90 px-4 py-3 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" type="button" onClick={() => setAddOpen(false)} className="w-full sm:w-auto">
+                    Cancel
+                  </Button>
+                  <Button type="button" onClick={handleAddContact} className="w-full sm:w-auto">
+                    Add contact
+                  </Button>
+                </div>
+              </div>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
+
         <Popover.Root open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <Popover.Trigger
-            className={`flex shrink-0 items-center gap-1.5 px-2.5 py-2 rounded-lg border text-xs transition-colors ${
-              hasActiveFilters
-                ? 'border-primary bg-primary/10 text-primary'
-                : 'border-border text-muted-foreground hover:text-foreground hover:bg-secondary/30'
-            }`}
-          >
-            <Filter className="w-3 h-3" />
-            Filters
-            {hasActiveFilters ? <span className="ml-0.5 w-1.5 h-1.5 rounded-full bg-primary" /> : null}
+          <Popover.Trigger asChild>
+            <Button
+              type="button"
+              variant="secondary"
+              className={`h-10 w-10 shrink-0 rounded-lg p-0 ${
+                hasActiveFilters ? 'bg-citrus-orange/10 text-citrus-orange' : ''
+              }`}
+              aria-label="Filters"
+            >
+              <Filter className="h-4 w-4" />
+            </Button>
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content side="bottom" align="end" sideOffset={10} collisionPadding={20} className={filtersPanelClass}>
-              <p className="text-xs font-medium text-foreground mb-4">Filter contacts</p>
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <Label className="text-[10px]">Tag</Label>
-                  <div className="flex flex-wrap gap-1.5">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Filters</p>
+                {hasActiveFilters ? (
+                  <button
+                    type="button"
+                    onClick={clearFilters}
+                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    aria-label="Clear filters"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                ) : null}
+              </div>
+              <div className="flex flex-col gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Tags{filterTags.size ? ` · ${filterTags.size}` : ''}
+                  </Label>
+                  <div className="max-h-36 space-y-1.5 overflow-y-auto rounded-lg border border-border/70 bg-surface-1/40 px-2 py-2">
+                    {allTags.map((t) => (
+                      <label key={t} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-xs hover:bg-secondary/50">
+                        <Checkbox checked={filterTags.has(t)} onCheckedChange={() => toggleFilterTag(t)} />
+                        <span>{t}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Company</Label>
+                  <div className="max-h-32 overflow-y-auto rounded-lg border border-border/70 bg-surface-1/40 p-1">
                     <button
                       type="button"
-                      onClick={() => setFilterTag('')}
-                      className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                        !filterTag ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                      className={`flex w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-secondary ${
+                        !filterCompany ? 'bg-secondary/60 font-medium' : ''
                       }`}
+                      onClick={() => setFilterCompany('')}
                     >
-                      All tags
+                      Any company
                     </button>
-                    {allTags.map((t) => (
+                    {allCompanies.map((co) => (
                       <button
-                        key={t}
+                        key={co}
                         type="button"
-                        onClick={() => setFilterTag(t)}
-                        className={`rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors ${
-                          filterTag === t ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground hover:bg-secondary/80'
+                        className={`flex w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-secondary ${
+                          filterCompany === co ? 'bg-citrus-orange/15 font-medium text-foreground' : ''
                         }`}
+                        onClick={() => setFilterCompany(co)}
                       >
-                        {t}
+                        {co}
                       </button>
                     ))}
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label className="text-[10px]">Company contains</Label>
-                  <Input value={filterCompanyQuery} onChange={(e) => setFilterCompanyQuery(e.target.value)} placeholder="Type to filter companies" />
-                  {filterCompanyQuery.trim() ? (
-                    <p className="text-[10px] text-muted-foreground">
-                      {companySuggestions.length} known {companySuggestions.length === 1 ? 'match' : 'matches'} in directory
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[10px]">Role contains</Label>
-                  <Input value={filterRoleQuery} onChange={(e) => setFilterRoleQuery(e.target.value)} placeholder="e.g. VP, CFO, Sales" />
-                </div>
-                <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-surface-1/50 px-4 py-3">
-                  <div>
-                    <p className="text-xs font-medium text-foreground">Starred only</p>
-                    <p className="text-[10px] text-muted-foreground">Show contacts you marked</p>
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Role</Label>
+                  <div className="max-h-32 overflow-y-auto rounded-lg border border-border/70 bg-surface-1/40 p-1">
+                    <button
+                      type="button"
+                      className={`flex w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-secondary ${
+                        !filterRole ? 'bg-secondary/60 font-medium' : ''
+                      }`}
+                      onClick={() => setFilterRole('')}
+                    >
+                      Any role
+                    </button>
+                    {allRoles.map((role) => (
+                      <button
+                        key={role}
+                        type="button"
+                        className={`flex w-full rounded-md px-2 py-1.5 text-left text-xs hover:bg-secondary ${
+                          filterRole === role ? 'bg-citrus-orange/15 font-medium text-foreground' : ''
+                        }`}
+                        onClick={() => setFilterRole(role)}
+                      >
+                        {role}
+                      </button>
+                    ))}
                   </div>
-                  <Switch checked={starredOnly} onCheckedChange={setStarredOnly} />
                 </div>
-              </div>
-              <div className="mt-6 pt-4 border-t border-border">
-                <Button variant="secondary" onClick={clearFilters} className="w-full text-xs">
-                  Clear filters
-                </Button>
+                <div className="flex items-center gap-2 pt-1">
+                  <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">Starred</Label>
+                  <button
+                    type="button"
+                    onClick={() => setStarredOnly((s) => !s)}
+                    className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+                      starredOnly
+                        ? 'border-citrus-lemon/50 bg-citrus-lemon/10 text-citrus-lemon'
+                        : 'border-border bg-surface-1 text-muted-foreground hover:bg-secondary/40'
+                    }`}
+                    aria-label={starredOnly ? 'Show all contacts' : 'Starred only'}
+                    aria-pressed={starredOnly}
+                  >
+                    <Star className={`h-4 w-4 ${starredOnly ? 'fill-citrus-lemon' : ''}`} />
+                  </button>
+                </div>
               </div>
             </Popover.Content>
           </Popover.Portal>
@@ -536,222 +862,72 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
         </div>
       </div>
 
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent showCloseButton className={dialogShellClass}>
-          <DialogHeader className="shrink-0 space-y-1 px-6 pb-2 pt-6 text-left sm:px-8 sm:pt-8">
-            <DialogTitle>Add contact</DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Required fields are validated. Phone accepts digits only.
-            </DialogDescription>
-          </DialogHeader>
-          <div className={dialogBodyClass}>
-            <div className="space-y-6">
-              <Card className="border-border/70 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">Profile</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px]">Name</Label>
-                    <Input
-                      value={newContact.name}
-                      error={!!addErrors.name}
-                      onChange={(e) => {
-                        setAddErrors((p) => ({ ...p, name: undefined }))
-                        setNewContact((p) => ({ ...p, name: stripDigitsFromName(e.target.value) }))
-                      }}
-                      placeholder="Full name"
-                    />
-                    {addErrors.name ? <p className="text-[10px] text-destructive">{addErrors.name}</p> : null}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px]">Email</Label>
-                    <Input
-                      type="email"
-                      value={newContact.email}
-                      error={!!addErrors.email}
-                      onChange={(e) => {
-                        setAddErrors((p) => ({ ...p, email: undefined }))
-                        setNewContact((p) => ({ ...p, email: e.target.value }))
-                      }}
-                      placeholder="name@company.com"
-                    />
-                    {addErrors.email ? <p className="text-[10px] text-destructive">{addErrors.email}</p> : null}
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px]">Phone (digits)</Label>
-                      <Input
-                        inputMode="numeric"
-                        pattern="[0-9]*"
-                        value={newContact.phone}
-                        error={!!addErrors.phone}
-                        onChange={(e) => {
-                          setAddErrors((p) => ({ ...p, phone: undefined }))
-                          setNewContact((p) => ({ ...p, phone: normalizePhoneDigits(e.target.value) }))
-                        }}
-                        placeholder="14155550100"
-                      />
-                      {addErrors.phone ? <p className="text-[10px] text-destructive">{addErrors.phone}</p> : null}
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px]">Time zone</Label>
-                      <AdvancedDropdown
-                        options={TIMEZONE_OPTIONS}
-                        value={newContact.timezone}
-                        onChange={(v) => setNewContact((p) => ({ ...p, timezone: v ?? 'UTC' }))}
-                        placeholder="Select time zone"
-                        searchPlaceholder="Search time zones…"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">Organization</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px]">Company</Label>
-                    <Input
-                      value={newContact.company}
-                      onChange={(e) => setNewContact((p) => ({ ...p, company: e.target.value }))}
-                      placeholder="Company name"
-                    />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px]">Role</Label>
-                      <Input
-                        value={newContact.role}
-                        onChange={(e) => setNewContact((p) => ({ ...p, role: e.target.value }))}
-                        placeholder="Job title"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-[10px]">Country / region</Label>
-                      <Input
-                        value={newContact.country}
-                        onChange={(e) => setNewContact((p) => ({ ...p, country: e.target.value }))}
-                        placeholder="Country"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">Links & notes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4 pt-0">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px]">LinkedIn URL</Label>
-                    <Input
-                      value={newContact.linkedInUrl}
-                      error={!!addErrors.linkedin}
-                      onChange={(e) => {
-                        setAddErrors((p) => ({ ...p, linkedin: undefined }))
-                        setNewContact((p) => ({ ...p, linkedInUrl: e.target.value }))
-                      }}
-                      placeholder="https://linkedin.com/in/…"
-                    />
-                    {addErrors.linkedin ? <p className="text-[10px] text-destructive">{addErrors.linkedin}</p> : null}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px]">Notes</Label>
-                    <Textarea
-                      value={newContact.notes}
-                      onChange={(e) => setNewContact((p) => ({ ...p, notes: e.target.value }))}
-                      rows={3}
-                      resize="vertical"
-                      placeholder="Context, preferences, or next steps"
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="border-border/70 shadow-none">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-xs font-medium text-muted-foreground">Tags</CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <div className="flex flex-wrap gap-1.5">
-                    {allTags.map((tag) => (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() =>
-                          setNewContact((p) => ({
-                            ...p,
-                            tags: p.tags.includes(tag) ? p.tags.filter((t) => t !== tag) : [...p.tags, tag],
-                          }))
-                        }
-                        className={`text-[10px] px-2 py-1 rounded-full transition-colors ${
-                          newContact.tags.includes(tag)
-                            ? tagColors[tag] || 'bg-secondary text-secondary-foreground'
-                            : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
-          <DialogFooter className={`${dialogFooterClass} flex-col gap-2 sm:flex-row sm:justify-end`}>
-            <Button variant="secondary" type="button" onClick={() => setAddOpen(false)} className="w-full sm:w-auto">
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleAddContact} className="w-full sm:w-auto">
-              Add contact
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={detailOpen} onOpenChange={closeDetail}>
         <DialogContent showCloseButton className={dialogShellClass}>
           {draft ? (
             <>
               <DialogHeader className="shrink-0 space-y-3 px-6 pb-2 pt-6 text-left sm:px-8 sm:pt-8">
                 <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-sm font-semibold text-primary">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-citrus-orange/10 text-sm font-semibold text-citrus-orange">
                     {initialsFromName(draft.name)}
                   </div>
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <DialogTitle className="text-lg font-semibold leading-tight">Edit contact</DialogTitle>
+                  <div className="min-w-0 flex-1 space-y-1 pr-10">
+                    <DialogTitle className="text-lg font-semibold leading-tight text-foreground">{draft.name || 'Contact'}</DialogTitle>
                     <DialogDescription className="text-xs text-muted-foreground">
-                      Update profile, organization, and tags. Changes apply when you save.
+                      {detailEditing ? 'Edit fields below, then save.' : 'View profile and details.'}
                     </DialogDescription>
                   </div>
+                  {!detailEditing ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="absolute right-12 top-5 h-9 w-9 shrink-0 rounded-lg p-0 sm:right-14 sm:top-6"
+                      aria-label="Edit contact"
+                      onClick={() => setDetailEditing(true)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Button
+                  <button
                     type="button"
-                    variant="secondary"
-                    className="h-8 gap-1.5 text-xs"
                     onClick={() => toggleStar(draft.id)}
+                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-1 text-muted-foreground transition-colors hover:border-citrus-lemon/40 hover:text-citrus-lemon"
+                    aria-label={draft.starred ? 'Remove star' : 'Add star'}
                   >
-                    <Star className={`h-3.5 w-3.5 ${draft.starred ? 'fill-citrus-lemon text-citrus-lemon' : ''}`} />
-                    {draft.starred ? 'Starred' : 'Mark starred'}
-                  </Button>
-                  {draft.tags.slice(0, 3).map((t) => (
-                    <Badge key={t} variant="outline" className="text-[10px] font-normal">
+                    <Star className={`h-4 w-4 ${draft.starred ? 'fill-citrus-lemon text-citrus-lemon' : ''}`} />
+                  </button>
+                  {draft.tags.map((t) => (
+                    <span
+                      key={t}
+                      className={`text-[10px] px-2 py-0.5 rounded-full ${tagColors[t] || 'bg-secondary text-secondary-foreground'}`}
+                    >
                       {t}
-                    </Badge>
+                    </span>
                   ))}
-                  {draft.tags.length > 3 ? (
-                    <span className="text-[10px] text-muted-foreground">+{draft.tags.length - 3}</span>
-                  ) : null}
                 </div>
               </DialogHeader>
 
               <div className={dialogBodyClass}>
+                {!detailEditing ? (
+                  <div className="space-y-6">
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <ReadField label="Email" value={draft.email} />
+                      <ReadField label="Phone" value={draft.phone} />
+                      <ReadField label="Time zone" value={TIMEZONE_OPTIONS.find((o) => o.value === draft.timezone)?.label ?? draft.timezone} />
+                      <ReadField label="Company" value={draft.company} />
+                      <ReadField label="Role" value={draft.role} />
+                      <ReadField label="Country" value={draft.country} />
+                      <div className="sm:col-span-2">
+                        <ReadField label="LinkedIn" value={draft.linkedInUrl} />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <ReadField label="Notes" value={draft.notes} />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className="space-y-6">
                   <Card className="border-border/70 shadow-none">
                     <CardHeader className="pb-3">
@@ -853,7 +1029,7 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
                       </div>
                       <div className="space-y-1.5">
                         <Label className="text-[10px]">Notes</Label>
-                        <Textarea value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={4} resize="vertical" />
+                        <AutoGrowTextarea value={draft.notes} onChange={(e) => setDraft({ ...draft, notes: e.target.value })} rows={4} />
                       </div>
                     </CardContent>
                   </Card>
@@ -888,15 +1064,24 @@ export default function ContactsPage({ embedded = false }: ContactsPageProps) {
                     </CardContent>
                   </Card>
                 </div>
+                )}
               </div>
 
               <DialogFooter className={`${dialogFooterClass} flex-col gap-2 sm:flex-row sm:justify-end`}>
-                <Button variant="secondary" type="button" onClick={() => closeDetail(false)} className="w-full sm:w-auto">
-                  Cancel
-                </Button>
-                <Button type="button" onClick={saveDetail} className="w-full sm:w-auto">
-                  Save changes
-                </Button>
+                {detailEditing ? (
+                  <>
+                    <Button variant="secondary" type="button" onClick={cancelDetailEdit} className="w-full sm:w-auto">
+                      Cancel
+                    </Button>
+                    <Button type="button" onClick={saveDetail} className="w-full sm:w-auto">
+                      Save changes
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="secondary" type="button" onClick={() => closeDetail(false)} className="w-full sm:w-auto">
+                    Close
+                  </Button>
+                )}
               </DialogFooter>
             </>
           ) : null}
