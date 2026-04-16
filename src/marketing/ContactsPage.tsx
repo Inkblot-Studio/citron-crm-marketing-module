@@ -193,11 +193,27 @@ type ContactsPageProps = { embedded?: boolean; loading?: boolean }
 
 type FieldErrors = Partial<Record<'name' | 'email' | 'phone' | 'linkedin', string>>
 
+/** Icon-only control size (dialogs, popover chrome). */
+const HEADER_ICON_BTN =
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg p-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background'
+
+/** Matches Marketing shell primary icon button (compose +, top right). */
+const MARKETING_PRIMARY_ICON_BTN =
+  'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-all duration-150 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95'
+
+/** Contact dialog — close: same frame as compose +, white fill. */
+const CONTACT_DETAIL_CLOSE_BTN =
+  'inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white text-foreground shadow-sm transition-all duration-150 hover:bg-muted/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 dark:bg-card'
+
+/** Filters trigger: same 32×32 frame as primary; white surface, sin borde. */
+const CONTACTS_FILTER_ICON_BTN =
+  'inline-flex h-8 w-8 items-center justify-center rounded-lg border-0 bg-white text-foreground shadow-none transition-all duration-150 hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95 dark:bg-card'
+
 function ReadField({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className="mt-1 text-sm text-foreground">{value.trim() ? value : '—'}</p>
+    <div className="rounded-xl bg-muted/35 px-3 py-2.5 shadow-sm dark:bg-muted/25 sm:px-3.5 sm:py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
+      <p className="mt-2 break-words text-sm font-medium leading-snug text-foreground">{value.trim() ? value : '—'}</p>
     </div>
   )
 }
@@ -420,21 +436,22 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
 
 
   const dialogShellClass =
-    'relative flex max-h-[min(92dvh,760px)] w-[calc(100vw-1.25rem)] max-w-xl flex-col gap-0 overflow-hidden border-border p-0 sm:max-w-xl'
+    'relative flex max-h-[min(92dvh,760px)] w-[calc(100vw-1.25rem)] max-w-xl flex-col gap-0 overflow-hidden rounded-2xl border-0 bg-background p-0 shadow-2xl shadow-black/18 sm:max-w-xl dark:shadow-black/45'
 
-  const dialogBodyClass = 'min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8'
+  const dialogBodyClass =
+    'overflow-y-auto bg-gradient-to-b from-muted/20 to-background/95 px-5 py-2.5 sm:px-6 sm:py-3 max-h-[min(75dvh,600px)]'
 
-  const dialogFooterClass = 'shrink-0 border-t border-border bg-surface-1/90 px-6 py-4 sm:px-8 backdrop-blur-sm'
+  const dialogFooterClass = 'shrink-0 border-0 bg-muted/25 px-5 py-3 backdrop-blur-md sm:px-6 sm:py-3'
 
   if (loading) {
     return (
       <div className="flex h-full min-h-0 flex-col">
-        <div className={`flex flex-wrap items-center gap-2 border-b border-border py-3 ${hPad}`}>
-          <Skeleton className="h-10 w-full max-w-[14rem] rounded-lg sm:max-w-[16rem]" />
-          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
-          <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+        <div className={`flex flex-wrap items-center gap-2 border-b border-border py-3 md:py-4 ${hPad}`}>
+          <Skeleton className="h-8 w-full max-w-[14rem] rounded-lg sm:max-w-[16rem]" />
+          <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
+          <Skeleton className="h-8 w-8 shrink-0 rounded-lg" />
         </div>
-        <div className={`min-h-0 flex-1 overflow-y-auto hide-scrollbar py-6 ${hPad}`}>
+        <div className={`min-h-0 flex-1 overflow-y-auto hide-scrollbar py-3 md:py-4 ${hPad}`}>
           <div className="glass overflow-hidden rounded-xl">
             <div className="grid grid-cols-[40px_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-3 border-b border-border px-5 py-3">
               <span />
@@ -468,13 +485,13 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
 
   return (
     <div className="h-full flex flex-col min-h-0">
-      <div className={`${hPad} py-3 border-b border-border flex flex-wrap items-center gap-2`}>
+      <div className={`flex flex-wrap items-center gap-2 border-b border-border py-3 md:py-4 ${hPad}`}>
         <div className="relative w-full max-w-[14rem] sm:max-w-[16rem]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-surface-1 border border-border rounded-lg pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+            className="h-8 w-full rounded-lg border border-stone-200/85 bg-surface-1 py-0 pl-9 pr-3 text-sm leading-none text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-citrus-orange/45 dark:border-stone-600/65"
             placeholder="Search contacts..."
           />
         </div>
@@ -489,9 +506,9 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
           }}
         >
           <Popover.Trigger asChild>
-            <Button type="button" className="h-10 w-10 shrink-0 rounded-lg p-0" aria-label="Add contact">
-              <Plus className="h-6 w-6" />
-            </Button>
+            <button type="button" className={MARKETING_PRIMARY_ICON_BTN} aria-label="Add contact">
+              <Plus className="h-4 w-4 shrink-0" aria-hidden />
+            </button>
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content
@@ -510,10 +527,10 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                   <button
                     type="button"
                     onClick={() => setAddOpen(false)}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    className={`${HEADER_ICON_BTN} text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground`}
                     aria-label="Close"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4 shrink-0" />
                   </button>
                 </div>
                 <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
@@ -689,16 +706,13 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
 
         <Popover.Root open={filtersOpen} onOpenChange={setFiltersOpen}>
           <Popover.Trigger asChild>
-            <Button
+            <button
               type="button"
-              variant="secondary"
-              className={`h-10 w-10 shrink-0 rounded-lg p-0 ${
-                hasActiveFilters ? 'bg-citrus-orange/10 text-citrus-orange' : ''
-              }`}
+              className={`${CONTACTS_FILTER_ICON_BTN} ${hasActiveFilters ? 'text-citrus-orange' : 'text-muted-foreground'}`}
               aria-label="Filters"
             >
-              <Filter className="h-4 w-4" />
-            </Button>
+              <Filter className="h-4 w-4 shrink-0" aria-hidden />
+            </button>
           </Popover.Trigger>
           <Popover.Portal>
             <Popover.Content side="bottom" align="end" sideOffset={10} collisionPadding={20} className={filtersPanelClass}>
@@ -708,10 +722,10 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                   <button
                     type="button"
                     onClick={clearFilters}
-                    className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    className={`${HEADER_ICON_BTN} text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground`}
                     aria-label="Clear filters"
                   >
-                    <X className="h-4 w-4" />
+                    <X className="h-4 w-4 shrink-0" />
                   </button>
                 ) : null}
               </div>
@@ -786,7 +800,7 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                   <button
                     type="button"
                     onClick={() => setStarredOnly((s) => !s)}
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+                    className={`${HEADER_ICON_BTN} border transition-colors ${
                       starredOnly
                         ? 'border-citrus-lemon/50 bg-citrus-lemon/10 text-citrus-lemon'
                         : 'border-border bg-surface-1 text-muted-foreground hover:bg-secondary/40'
@@ -794,7 +808,7 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                     aria-label={starredOnly ? 'Show all contacts' : 'Starred only'}
                     aria-pressed={starredOnly}
                   >
-                    <Star className={`h-4 w-4 ${starredOnly ? 'fill-citrus-lemon' : ''}`} />
+                    <Star className={`h-4 w-4 shrink-0 ${starredOnly ? 'fill-citrus-lemon' : ''}`} />
                   </button>
                 </div>
               </div>
@@ -803,7 +817,7 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
         </Popover.Root>
       </div>
 
-      <div className={`flex-1 overflow-y-auto hide-scrollbar ${hPad} py-6 min-h-0`}>
+      <div className={`min-h-0 flex-1 overflow-y-auto hide-scrollbar ${hPad} py-3 md:py-4`}>
         <div className="glass rounded-xl overflow-hidden">
           <div className="grid grid-cols-[40px_minmax(0,1.1fr)_minmax(0,1.1fr)_minmax(0,0.9fr)_minmax(0,1fr)_minmax(0,1.2fr)] gap-3 px-5 py-3 border-b border-border text-[10px] text-muted-foreground uppercase tracking-wider">
             <span />
@@ -863,45 +877,65 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
       </div>
 
       <Dialog open={detailOpen} onOpenChange={closeDetail}>
-        <DialogContent showCloseButton className={dialogShellClass}>
+        <DialogContent showCloseButton={false} className={dialogShellClass}>
           {draft ? (
             <>
-              <DialogHeader className="shrink-0 space-y-3 px-6 pb-2 pt-6 text-left sm:px-8 sm:pt-8">
-                <div className="flex items-start gap-4">
-                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-citrus-orange/10 text-sm font-semibold text-citrus-orange">
+              <DialogHeader className="shrink-0 space-y-0 border-0 bg-gradient-to-br from-citrus-orange/[0.08] via-muted/25 to-background px-5 pb-3 pt-4 text-left sm:px-6 sm:pb-3 sm:pt-4">
+                <div className="flex items-start gap-3 sm:gap-4">
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-citrus-orange/25 to-citrus-orange/8 text-sm font-bold tracking-tight text-citrus-orange shadow-md sm:h-[3.25rem] sm:w-[3.25rem] sm:rounded-2xl sm:text-base">
                     {initialsFromName(draft.name)}
                   </div>
-                  <div className="min-w-0 flex-1 space-y-1 pr-10">
-                    <DialogTitle className="text-lg font-semibold leading-tight text-foreground">{draft.name || 'Contact'}</DialogTitle>
-                    <DialogDescription className="text-xs text-muted-foreground">
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <DialogTitle className="text-left text-lg font-semibold leading-tight tracking-tight text-foreground sm:text-xl">
+                        {draft.name || 'Contact'}
+                      </DialogTitle>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                          detailEditing
+                            ? 'bg-accent/15 text-accent'
+                            : 'bg-muted text-muted-foreground'
+                        }`}
+                      >
+                        {detailEditing ? 'Editing' : 'View'}
+                      </span>
+                    </div>
+                    <DialogDescription className="text-[13px] leading-relaxed text-muted-foreground">
                       {detailEditing ? 'Edit fields below, then save.' : 'View profile and details.'}
                     </DialogDescription>
                   </div>
-                  {!detailEditing ? (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="absolute right-12 top-5 h-9 w-9 shrink-0 rounded-lg p-0 sm:right-14 sm:top-6"
-                      aria-label="Edit contact"
-                      onClick={() => setDetailEditing(true)}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                  ) : null}
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {!detailEditing ? (
+                      <button
+                        type="button"
+                        className={MARKETING_PRIMARY_ICON_BTN}
+                        aria-label="Edit contact"
+                        onClick={() => setDetailEditing(true)}
+                      >
+                        <Pencil className="h-4 w-4 shrink-0" aria-hidden />
+                      </button>
+                    ) : null}
+                    <button type="button" className={CONTACT_DETAIL_CLOSE_BTN} aria-label="Close" onClick={() => closeDetail(false)}>
+                      <X className="h-4 w-4 shrink-0" aria-hidden />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2 pt-1">
+                <div className="mt-2.5 flex flex-wrap items-center gap-2 rounded-xl bg-muted/30 px-3 py-2 sm:px-3.5">
                   <button
                     type="button"
                     onClick={() => toggleStar(draft.id)}
-                    className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-surface-1 text-muted-foreground transition-colors hover:border-citrus-lemon/40 hover:text-citrus-lemon"
+                    className={`${HEADER_ICON_BTN} bg-muted/50 text-muted-foreground transition-colors hover:bg-citrus-lemon/10 hover:text-citrus-lemon`}
                     aria-label={draft.starred ? 'Remove star' : 'Add star'}
                   >
-                    <Star className={`h-4 w-4 ${draft.starred ? 'fill-citrus-lemon text-citrus-lemon' : ''}`} />
+                    <Star className={`h-4 w-4 shrink-0 ${draft.starred ? 'fill-citrus-lemon text-citrus-lemon' : ''}`} />
                   </button>
+                  {draft.tags.length > 0 ? (
+                    <span className="hidden h-4 w-px shrink-0 bg-stone-300/70 dark:bg-stone-600/70 sm:block" aria-hidden />
+                  ) : null}
                   {draft.tags.map((t) => (
                     <span
                       key={t}
-                      className={`text-[10px] px-2 py-0.5 rounded-full ${tagColors[t] || 'bg-secondary text-secondary-foreground'}`}
+                      className={`text-[10px] font-medium shadow-sm px-2.5 py-1 rounded-full ${tagColors[t] || 'bg-secondary text-secondary-foreground'}`}
                     >
                       {t}
                     </span>
@@ -911,8 +945,8 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
 
               <div className={dialogBodyClass}>
                 {!detailEditing ? (
-                  <div className="space-y-6">
-                    <div className="grid gap-5 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-muted/25 p-3 shadow-sm sm:p-4 dark:bg-muted/20">
+                    <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-3">
                       <ReadField label="Email" value={draft.email} />
                       <ReadField label="Phone" value={draft.phone} />
                       <ReadField label="Time zone" value={TIMEZONE_OPTIONS.find((o) => o.value === draft.timezone)?.label ?? draft.timezone} />
@@ -928,12 +962,12 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                     </div>
                   </div>
                 ) : (
-                <div className="space-y-6">
-                  <Card className="border-border/70 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-muted-foreground">Profile</CardTitle>
+                <div className="space-y-3 sm:space-y-4">
+                  <Card className="overflow-hidden rounded-2xl border-0 bg-card/95 shadow-md">
+                    <CardHeader className="border-0 bg-muted/30 px-4 pb-2 pt-3 sm:px-5 sm:pb-2.5 sm:pt-3.5">
+                      <CardTitle className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/90">Profile</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 pt-0">
+                    <CardContent className="space-y-3 px-4 pb-4 pt-3 sm:px-5 sm:pb-4 sm:pt-3.5">
                       <div className="space-y-1.5">
                         <Label className="text-[10px]">Name</Label>
                         <Input
@@ -981,18 +1015,17 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                             onChange={(v) => setDraft({ ...draft, timezone: v ?? draft.timezone })}
                             placeholder="Time zone"
                             searchPlaceholder="Search time zones…"
-                            clearable
                           />
                         </div>
                       </div>
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/70 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-muted-foreground">Organization</CardTitle>
+                  <Card className="overflow-hidden rounded-2xl border-0 bg-card/95 shadow-md">
+                    <CardHeader className="border-0 bg-muted/30 px-4 pb-2 pt-3 sm:px-5 sm:pb-2.5 sm:pt-3.5">
+                      <CardTitle className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/90">Organization</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 pt-0">
+                    <CardContent className="space-y-3 px-4 pb-4 pt-3 sm:px-5 sm:pb-4 sm:pt-3.5">
                       <div className="space-y-1.5">
                         <Label className="text-[10px]">Company</Label>
                         <Input value={draft.company} onChange={(e) => setDraft({ ...draft, company: e.target.value })} />
@@ -1010,11 +1043,11 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/70 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-muted-foreground">Links & notes</CardTitle>
+                  <Card className="overflow-hidden rounded-2xl border-0 bg-card/95 shadow-md">
+                    <CardHeader className="border-0 bg-muted/30 px-4 pb-2 pt-3 sm:px-5 sm:pb-2.5 sm:pt-3.5">
+                      <CardTitle className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/90">Links & notes</CardTitle>
                     </CardHeader>
-                    <CardContent className="space-y-4 pt-0">
+                    <CardContent className="space-y-3 px-4 pb-4 pt-3 sm:px-5 sm:pb-4 sm:pt-3.5">
                       <div className="space-y-1.5">
                         <Label className="text-[10px]">LinkedIn URL</Label>
                         <Input
@@ -1034,12 +1067,12 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border/70 shadow-none">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-xs font-medium text-muted-foreground">Tags</CardTitle>
+                  <Card className="overflow-hidden rounded-2xl border-0 bg-card/95 shadow-md">
+                    <CardHeader className="border-0 bg-muted/30 px-4 pb-2 pt-3 sm:px-5 sm:pb-2.5 sm:pt-3.5">
+                      <CardTitle className="text-[11px] font-bold uppercase tracking-[0.1em] text-foreground/90">Tags</CardTitle>
                     </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex flex-wrap gap-1.5">
+                    <CardContent className="px-4 pb-4 pt-3 sm:px-5 sm:pb-4 sm:pt-3.5">
+                      <div className="flex flex-wrap gap-2">
                         {allTags.map((tag) => {
                           const on = draft.tags.includes(tag)
                           return (
@@ -1052,8 +1085,8 @@ export default function ContactsPage({ embedded = false, loading = false }: Cont
                                   tags: on ? draft.tags.filter((t) => t !== tag) : [...draft.tags, tag],
                                 })
                               }
-                              className={`text-[10px] px-2 py-1 rounded-full transition-colors ${
-                                on ? tagColors[tag] || 'bg-secondary text-secondary-foreground' : 'bg-secondary/50 text-muted-foreground hover:bg-secondary'
+                              className={`text-[10px] font-medium px-2.5 py-1.5 rounded-full shadow-sm transition-colors ${
+                                on ? tagColors[tag] || 'bg-secondary text-secondary-foreground' : 'bg-muted/60 text-muted-foreground hover:bg-muted'
                               }`}
                             >
                               {tag}

@@ -965,7 +965,7 @@ export default function MarketingPage() {
                   aria-label={TAB_LABELS[tab]}
                   title={TAB_LABELS[tab]}
                   onClick={() => setActiveTab(tab)}
-                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                  className={`inline-flex h-8 w-8 shrink-0 items-center justify-center transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                     selected
                       ? 'bg-secondary text-foreground'
                       : 'text-muted-foreground hover:bg-secondary/50 hover:text-foreground'
@@ -979,7 +979,7 @@ export default function MarketingPage() {
           <button
             type="button"
             onClick={() => setActiveTab('compose')}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-all duration-150 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-accent-foreground transition-all duration-150 hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background active:scale-95"
             aria-label={TAB_LABELS.compose}
             title={TAB_LABELS.compose}
           >
@@ -1468,7 +1468,7 @@ export default function MarketingPage() {
                                 aria-label={`${label} preview`}
                                 aria-pressed={previewDevice === id}
                                 onClick={() => setPreviewDevice(id)}
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 focus-visible:ring-citrus-orange/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                                   previewDevice === id
                                     ? 'bg-secondary text-foreground shadow-sm'
                                     : 'text-muted-foreground hover:bg-white/70 hover:text-foreground'
